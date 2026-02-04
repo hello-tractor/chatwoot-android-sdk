@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="chatwoot_send">Send</string>
+    <string name="chatwoot_retry">Retry</string>
+    <string name="chatwoot_typing">typing\u2026</string>
+    <string name="chatwoot_connecting">Connecting\u2026</string>
+    <string name="chatwoot_disconnected">Disconnected. Tap to retry.</string>
+    <string name="chatwoot_agent_avatar">Agent avatar</string>
+    <string name="chatwoot_message_hint">Type a message\u2026</string>
+</resources>
