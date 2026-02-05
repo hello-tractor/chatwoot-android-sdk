@@ -12,42 +12,33 @@ Native Kotlin SDK for integrating [Chatwoot](https://www.chatwoot.com/) live cha
 
 ## Installation
 
-### GitHub Packages (Private)
+### JitPack
 
-Add the GitHub Packages repository to your project's `settings.gradle` or root `build.gradle`:
+[![](https://jitpack.io/v/hello-tractor/chatwoot-android-sdk.svg)](https://jitpack.io/#hello-tractor/chatwoot-android-sdk)
+
+Add JitPack repository to your project's `settings.gradle`:
 
 ```groovy
 dependencyResolutionManagement {
+    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
     repositories {
         google()
         mavenCentral()
-        maven {
-            url = uri("https://maven.pkg.github.com/hello-tractor/chatwoot-android-sdk")
-            credentials {
-                username = project.findProperty("gpr.user") ?: System.getenv("GITHUB_USERNAME")
-                password = project.findProperty("gpr.token") ?: System.getenv("GITHUB_TOKEN")
-            }
-        }
+        maven { url 'https://jitpack.io' }
     }
 }
 ```
-
-Add credentials to your `~/.gradle/gradle.properties`:
-
-```properties
-gpr.user=YOUR_GITHUB_USERNAME
-gpr.token=YOUR_GITHUB_TOKEN
-```
-
-> Note: The GitHub token needs `read:packages` scope.
 
 Add the dependency to your app's `build.gradle`:
 
 ```groovy
 dependencies {
-    implementation 'com.hellotractor:chatwoot-sdk:1.0.0'
+    implementation 'com.github.hello-tractor:chatwoot-android-sdk:1.0.0'
 }
 ```
+
+> **Note:** For private repos, each developer needs to add their JitPack auth token.
+> See [JitPack Private Repos](https://jitpack.io/docs/PRIVATE/) for setup.
 
 ### Local Module (Alternative)
 

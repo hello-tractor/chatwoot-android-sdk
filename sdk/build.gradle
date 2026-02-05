@@ -100,19 +100,9 @@ afterEvaluate {
             release(MavenPublication) {
                 from components.release
 
-                groupId = 'com.hellotractor'
-                artifactId = 'chatwoot-sdk'
-                version = '1.0.0'
-            }
-        }
-        repositories {
-            maven {
-                name = "GitHubPackages"
-                url = uri("https://maven.pkg.github.com/hello-tractor/chatwoot-android-sdk")
-                credentials {
-                    username = project.findProperty("gpr.user") ?: System.getenv("GITHUB_USERNAME")
-                    password = project.findProperty("gpr.token") ?: System.getenv("GITHUB_TOKEN")
-                }
+                groupId = 'com.github.hello-tractor'
+                artifactId = 'chatwoot-android-sdk'
+                version = project.findProperty('VERSION_NAME') ?: '1.0.0'
             }
         }
     }
