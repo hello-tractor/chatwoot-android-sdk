@@ -10,6 +10,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
+import androidx.lifecycle.ViewModelProvider
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.hellotractor.chatwoot.ChatwootTheme
 import com.hellotractor.chatwoot.R
@@ -23,7 +24,6 @@ import com.hellotractor.chatwoot.util.ConnectionState
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import org.koin.androidx.viewmodel.ext.android.viewModel
 
 class ChatwootChatActivity : AppCompatActivity() {
 
@@ -38,7 +38,9 @@ class ChatwootChatActivity : AppCompatActivity() {
     }
 
     private lateinit var binding: ActivityChatwootChatBinding
-    private val viewModel: ChatwootViewModel by viewModel()
+    private val viewModel: ChatwootViewModel by lazy {
+        ViewModelProvider(this, ChatwootViewModelFactory())[ChatwootViewModel::class.java]
+    }
     private lateinit var messageAdapter: ChatwootMessageAdapter
     private var typingJob: Job? = null
 

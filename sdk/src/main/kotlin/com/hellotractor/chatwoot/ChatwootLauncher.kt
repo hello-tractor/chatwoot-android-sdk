@@ -10,6 +10,13 @@ import com.hellotractor.chatwoot.presentation.ChatwootChatActivity
  *
  * Usage:
  * ```
+ * // 1. Initialize once (e.g., in Application.onCreate()):
+ * ChatwootSDK.init(
+ *     context = applicationContext,
+ *     config = ChatwootConfig(baseUrl = "https://...", inboxIdentifier = "...")
+ * )
+ *
+ * // 2. Launch chat from anywhere:
  * ChatwootLauncher.launch(
  *     context = this,
  *     user = ChatwootUser(
@@ -17,7 +24,7 @@ import com.hellotractor.chatwoot.presentation.ChatwootChatActivity
  *         name = "John Doe",
  *         email = "john@example.com"
  *     ),
- *     theme = ChatwootTheme.helloTractor()  // or custom theme
+ *     theme = ChatwootTheme.helloTractor()
  * )
  * ```
  */
@@ -28,6 +35,10 @@ object ChatwootLauncher {
         user: ChatwootUser,
         theme: ChatwootTheme = ChatwootTheme.default()
     ) {
+        check(ChatwootSDK.isInitialized) {
+            "ChatwootSDK is not initialized. Call ChatwootSDK.init(context, config) before launching chat."
+        }
+
         ChatwootChatActivity.themeOverride = theme
         val intent = Intent(context, ChatwootChatActivity::class.java).apply {
             putExtra(ChatwootChatActivity.EXTRA_USER_IDENTIFIER, user.identifier)
