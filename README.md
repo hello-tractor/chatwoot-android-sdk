@@ -33,12 +33,9 @@ Add the dependency to your app's `build.gradle`:
 
 ```groovy
 dependencies {
-    implementation 'com.github.hello-tractor:chatwoot-android-sdk:1.0.0'
+    implementation 'com.github.hello-tractor:chatwoot-android-sdk:1.0.1'
 }
 ```
-
-> **Note:** For private repos, each developer needs to add their JitPack auth token.
-> See [JitPack Private Repos](https://jitpack.io/docs/PRIVATE/) for setup.
 
 ### Local Module (Alternative)
 
