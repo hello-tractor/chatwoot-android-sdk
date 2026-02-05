@@ -36,13 +36,14 @@ class ChatwootConfigTest {
     }
 
     @Test
-    fun `webSocketUrl handles http protocol`() {
+    fun `http is auto-upgraded to https`() {
         val config = ChatwootConfig(
-            baseUrl = "http://localhost:3000",
+            baseUrl = "http://app.chatwoot.com",
             inboxIdentifier = "inbox-123"
         )
 
-        assertThat(config.webSocketUrl).isEqualTo("wss://localhost:3000/cable")
+        assertThat(config.apiUrl).isEqualTo("https://app.chatwoot.com/public/api/v1/inboxes/inbox-123")
+        assertThat(config.webSocketUrl).isEqualTo("wss://app.chatwoot.com/cable")
     }
 
     @Test
@@ -68,5 +69,15 @@ class ChatwootConfigTest {
     @Test(expected = IllegalArgumentException::class)
     fun `constructor throws when baseUrl is whitespace only`() {
         ChatwootConfig(baseUrl = "   ", inboxIdentifier = "inbox-123")
+    }
+
+    @Test
+    fun `baseUrl with whitespace is trimmed`() {
+        val config = ChatwootConfig(
+            baseUrl = "  https://app.chatwoot.com  ",
+            inboxIdentifier = "inbox-123"
+        )
+
+        assertThat(config.apiUrl).isEqualTo("https://app.chatwoot.com/public/api/v1/inboxes/inbox-123")
     }
 }

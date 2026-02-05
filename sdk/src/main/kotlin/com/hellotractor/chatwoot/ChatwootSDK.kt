@@ -2,7 +2,11 @@ package com.hellotractor.chatwoot
 
 import android.content.Context
 import android.content.SharedPreferences
+import android.os.Build
+import android.util.Log
 import androidx.room.Room
+import androidx.security.crypto.EncryptedSharedPreferences
+import androidx.security.crypto.MasterKey
 import com.google.gson.Gson
 import com.hellotractor.chatwoot.data.local.ChatwootDatabase
 import com.hellotractor.chatwoot.data.local.dao.ChatwootContactDao
@@ -69,12 +73,21 @@ object ChatwootSDK {
 
 internal class ChatwootDependencies(context: Context, val config: ChatwootConfig) {
 
+    companion object {
+        private const val TAG = "ChatwootSDK"
+    }
+
     val gson: Gson = Gson()
 
     val okHttpClient: OkHttpClient = OkHttpClient.Builder()
-        .addInterceptor(HttpLoggingInterceptor().apply {
-            level = HttpLoggingInterceptor.Level.BODY
-        })
+        .apply {
+            // Only enable HTTP logging in debug builds - NEVER log request/response bodies in production
+            if (BuildConfig.DEBUG) {
+                addInterceptor(HttpLoggingInterceptor().apply {
+                    level = HttpLoggingInterceptor.Level.BASIC
+                })
+            }
+        }
         .connectTimeout(30, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
         .writeTimeout(30, TimeUnit.SECONDS)
@@ -98,9 +111,8 @@ internal class ChatwootDependencies(context: Context, val config: ChatwootConfig
     val contactDao: ChatwootContactDao = database.contactDao()
     val conversationDao: ChatwootConversationDao = database.conversationDao()
 
-    val prefs: SharedPreferences = context.getSharedPreferences(
-        ChatwootConstants.PREFS_NAME, Context.MODE_PRIVATE
-    )
+    // Use EncryptedSharedPreferences for secure token storage (API 23+)
+    val prefs: SharedPreferences = createSecurePrefs(context)
 
     val webSocketManager: ChatwootWebSocketManager = ChatwootWebSocketManager(
         config = config,
@@ -120,4 +132,24 @@ internal class ChatwootDependencies(context: Context, val config: ChatwootConfig
     val loadMessagesUseCase: LoadMessagesUseCase = LoadMessagesUseCase(repository)
     val sendMessageUseCase: SendMessageUseCase = SendMessageUseCase(repository)
     val sendActionUseCase: SendActionUseCase = SendActionUseCase(webSocketManager)
+
+    private fun createSecurePrefs(context: Context): SharedPreferences {
+        return try {
+            val masterKey = MasterKey.Builder(context)
+                .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+                .build()
+
+            EncryptedSharedPreferences.create(
+                context,
+                ChatwootConstants.PREFS_NAME,
+                masterKey,
+                EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+                EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+            )
+        } catch (e: Exception) {
+            // Fallback to regular SharedPreferences if encryption fails (shouldn't happen on API 23+)
+            Log.w(TAG, "Failed to create encrypted prefs, falling back to standard prefs", e)
+            context.getSharedPreferences(ChatwootConstants.PREFS_NAME, Context.MODE_PRIVATE)
+        }
+    }
 }

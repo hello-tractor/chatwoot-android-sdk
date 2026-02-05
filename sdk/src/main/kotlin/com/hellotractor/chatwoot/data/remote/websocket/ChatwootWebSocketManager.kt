@@ -1,10 +1,9 @@
 package com.hellotractor.chatwoot.data.remote.websocket
 
-import android.util.Log
 import com.google.gson.Gson
-import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 import com.google.gson.reflect.TypeToken
+import com.hellotractor.chatwoot.BuildConfig
 import com.hellotractor.chatwoot.ChatwootConfig
 import com.hellotractor.chatwoot.data.remote.dto.ChatwootMessageDto
 import com.hellotractor.chatwoot.data.mapper.toDomain
@@ -33,6 +32,19 @@ class ChatwootWebSocketManager(
 ) {
     companion object {
         private const val TAG = "ChatwootWS"
+        private const val MAX_RECONNECT_ATTEMPTS = 10
+    }
+
+    private fun logDebug(message: String) {
+        if (BuildConfig.DEBUG) {
+            android.util.Log.d(TAG, message)
+        }
+    }
+
+    private fun logError(message: String, throwable: Throwable? = null) {
+        if (BuildConfig.DEBUG) {
+            android.util.Log.e(TAG, message, throwable)
+        }
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -98,7 +110,7 @@ class ChatwootWebSocketManager(
 
         webSocket = okHttpClient.newWebSocket(request, object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
-                Log.d(TAG, "WebSocket opened")
+                logDebug("WebSocket opened")
                 reconnectAttempts = 0
             }
 
@@ -107,12 +119,12 @@ class ChatwootWebSocketManager(
             }
 
             override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
-                Log.d(TAG, "WebSocket closing: $code $reason")
+                logDebug("WebSocket closing: $code $reason")
                 webSocket.close(code, reason)
             }
 
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
-                Log.d(TAG, "WebSocket closed: $code $reason")
+                logDebug("WebSocket closed: $code $reason")
                 _connectionState.value = ConnectionState.DISCONNECTED
                 presenceJob?.cancel()
                 if (!isManuallyDisconnected) {
@@ -121,7 +133,7 @@ class ChatwootWebSocketManager(
             }
 
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-                Log.e(TAG, "WebSocket failure: ${t.message}", t)
+                logError("WebSocket failure: ${t.message}", t)
                 _connectionState.value = ConnectionState.DISCONNECTED
                 _events.tryEmit(ChatwootWebSocketEvent.Error(
                     ChatwootError.WebSocketError(t.message ?: "Connection failed")
@@ -163,7 +175,7 @@ class ChatwootWebSocketManager(
                 }
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to parse WS message: ${e.message}", e)
+            logError("Failed to parse WS message: ${e.message}", e)
         }
     }
 
@@ -206,7 +218,7 @@ class ChatwootWebSocketManager(
                 }
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to parse data message: ${e.message}", e)
+            logError("Failed to parse data message: ${e.message}", e)
         }
     }
 
@@ -239,10 +251,18 @@ class ChatwootWebSocketManager(
     }
 
     private fun scheduleReconnect() {
+        if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+            logDebug("Max reconnection attempts ($MAX_RECONNECT_ATTEMPTS) reached, giving up")
+            _events.tryEmit(ChatwootWebSocketEvent.Error(
+                ChatwootError.WebSocketError("Connection failed after $MAX_RECONNECT_ATTEMPTS attempts")
+            ))
+            return
+        }
+
         reconnectJob?.cancel()
         reconnectJob = scope.launch {
             val delay = calculateBackoff()
-            Log.d(TAG, "Reconnecting in ${delay}ms (attempt $reconnectAttempts)")
+            logDebug("Reconnecting in ${delay}ms (attempt $reconnectAttempts)")
             delay(delay)
             reconnectAttempts++
             doConnect()
