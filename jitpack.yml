@@ -6,4 +6,4 @@ before_install:
   - sdk use java 17.0.9-zulu
 
 install:
-  - ./gradlew :sdk:assembleRelease
+  - ./gradlew :sdk:publishToMavenLocal
