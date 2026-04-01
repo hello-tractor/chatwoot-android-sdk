@@ -4,7 +4,9 @@ import com.google.common.truth.Truth.assertThat
 import com.hellotractor.chatwoot.domain.model.ChatwootMessage
 import com.hellotractor.chatwoot.domain.model.ChatwootMessageType
 import com.hellotractor.chatwoot.domain.repository.ChatwootRepository
+import com.hellotractor.chatwoot.util.ChatwootConstants
 import io.mockk.coEvery
+import io.mockk.coVerify
 import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
 import org.junit.Before
@@ -28,7 +30,7 @@ class LoadMessagesUseCaseTest {
 
     @Before
     fun setup() {
-        repository = mockk()
+        repository = mockk(relaxed = true)
         useCase = LoadMessagesUseCase(repository)
     }
 
@@ -80,5 +82,70 @@ class LoadMessagesUseCaseTest {
 
         assertThat(result.isFailure).isTrue()
         assertThat(result.exceptionOrNull()?.message).isEqualTo("Network error")
+    }
+
+    @Test
+    fun `invoke runs retention cleanup`() = runTest {
+        coEvery { repository.getPersistedMessages(100) } returns emptyList()
+        coEvery { repository.getMessages("contact", 100) } returns Result.success(remoteMessages)
+
+        useCase("contact", 100)
+
+        coVerify { repository.deleteOldMessages(any()) }
+        coVerify { repository.trimMessages(100, ChatwootConstants.MESSAGES_MAX_PER_CONVERSATION) }
+    }
+
+    @Test
+    fun `invoke sets hasMore true when messages fill a page`() = runTest {
+        val fullPage = (1..ChatwootConstants.MESSAGES_PAGE_SIZE).map {
+            ChatwootMessage(id = it, content = "Msg $it", messageType = ChatwootMessageType.INCOMING, createdAt = it.toLong(), conversationId = 100)
+        }
+        coEvery { repository.getPersistedMessages(100) } returns emptyList()
+        coEvery { repository.getMessages("contact", 100) } returns Result.success(fullPage)
+
+        val result = useCase("contact", 100)
+
+        assertThat(result.getOrNull()!!.hasMore).isTrue()
+    }
+
+    @Test
+    fun `invoke sets hasMore false when messages are fewer than page size`() = runTest {
+        coEvery { repository.getPersistedMessages(100) } returns emptyList()
+        coEvery { repository.getMessages("contact", 100) } returns Result.success(remoteMessages)
+
+        val result = useCase("contact", 100)
+
+        assertThat(result.getOrNull()!!.hasMore).isFalse()
+    }
+
+    @Test
+    fun `loadMore returns paged messages from local DB`() = runTest {
+        val pagedMessages = listOf(
+            ChatwootMessage(id = 10, content = "Old 1", messageType = ChatwootMessageType.INCOMING, createdAt = 10L, conversationId = 100),
+            ChatwootMessage(id = 11, content = "Old 2", messageType = ChatwootMessageType.INCOMING, createdAt = 11L, conversationId = 100)
+        )
+        coEvery {
+            repository.getPersistedMessagesPaged(100, ChatwootConstants.MESSAGES_PAGE_SIZE, 5)
+        } returns pagedMessages
+
+        val result = useCase.loadMore(100, 5)
+
+        assertThat(result.messages).hasSize(2)
+        assertThat(result.fromCache).isTrue()
+        assertThat(result.hasMore).isFalse()
+    }
+
+    @Test
+    fun `loadMore sets hasMore true when full page returned`() = runTest {
+        val fullPage = (1..ChatwootConstants.MESSAGES_PAGE_SIZE).map {
+            ChatwootMessage(id = it, content = "Msg $it", messageType = ChatwootMessageType.INCOMING, createdAt = it.toLong(), conversationId = 100)
+        }
+        coEvery {
+            repository.getPersistedMessagesPaged(100, ChatwootConstants.MESSAGES_PAGE_SIZE, 0)
+        } returns fullPage
+
+        val result = useCase.loadMore(100, 0)
+
+        assertThat(result.hasMore).isTrue()
     }
 }

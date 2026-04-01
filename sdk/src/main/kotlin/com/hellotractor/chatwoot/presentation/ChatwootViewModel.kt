@@ -1,5 +1,6 @@
 package com.hellotractor.chatwoot.presentation
 
+import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.hellotractor.chatwoot.data.remote.websocket.ChatwootWebSocketManager
@@ -68,20 +69,28 @@ class ChatwootViewModel(
 
     fun onEvent(event: ChatwootUiEvent) {
         when (event) {
-            is ChatwootUiEvent.SendMessage -> sendMessage(event.content)
+            is ChatwootUiEvent.SendMessage -> sendMessage(event.content, event.attachmentUri)
+            is ChatwootUiEvent.AttachmentSelected -> _state.update { it.copy(pendingAttachmentUri = event.uri) }
+            is ChatwootUiEvent.AttachmentRemoved -> _state.update { it.copy(pendingAttachmentUri = null) }
             is ChatwootUiEvent.StartTyping -> conversationId?.let { sendActionUseCase.sendTyping(it) }
             is ChatwootUiEvent.StopTyping -> conversationId?.let { sendActionUseCase.sendStopTyping(it) }
             is ChatwootUiEvent.RetryConnection -> retryConnection()
             is ChatwootUiEvent.LoadMessages -> loadMessages()
+            is ChatwootUiEvent.LoadMoreMessages -> loadMoreMessages()
         }
     }
 
-    private fun sendMessage(content: String) {
+    private fun sendMessage(content: String, attachmentUri: Uri? = null) {
         val cId = contactId ?: return
         val convId = conversationId ?: return
+        val uri = attachmentUri ?: _state.value.pendingAttachmentUri
 
         viewModelScope.launch {
-            val result = sendMessageUseCase(cId, convId, content)
+            if (uri != null) {
+                _state.update { it.copy(isUploading = true) }
+            }
+            val result = sendMessageUseCase(cId, convId, content, uri)
+            _state.update { it.copy(isUploading = false, pendingAttachmentUri = null) }
             result.fold(
                 onSuccess = {
                     _effects.send(ChatwootUiEffect.MessageSent)
@@ -103,7 +112,13 @@ class ChatwootViewModel(
             val result = loadMessagesUseCase(cId, convId)
             result.fold(
                 onSuccess = { loadResult ->
-                    _state.update { it.copy(isLoading = false, messages = loadResult.messages) }
+                    _state.update {
+                        it.copy(
+                            isLoading = false,
+                            messages = loadResult.messages,
+                            hasMoreMessages = loadResult.hasMore
+                        )
+                    }
                     _effects.send(ChatwootUiEffect.ScrollToBottom)
                 },
                 onFailure = { error ->
@@ -111,6 +126,24 @@ class ChatwootViewModel(
                     _effects.send(ChatwootUiEffect.ShowError(error.message ?: "Failed to load messages"))
                 }
             )
+        }
+    }
+
+    private fun loadMoreMessages() {
+        val convId = conversationId ?: return
+        if (_state.value.isLoadingMore || !_state.value.hasMoreMessages) return
+
+        viewModelScope.launch {
+            _state.update { it.copy(isLoadingMore = true) }
+            val currentCount = _state.value.messages.size
+            val loadResult = loadMessagesUseCase.loadMore(convId, currentCount)
+            _state.update {
+                it.copy(
+                    isLoadingMore = false,
+                    messages = loadResult.messages + it.messages,
+                    hasMoreMessages = loadResult.hasMore
+                )
+            }
         }
     }
 

@@ -1,30 +1,36 @@
 package com.hellotractor.chatwoot.presentation.adapter
 
-import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.ImageView
+import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
+import com.bumptech.glide.Glide
+import com.bumptech.glide.load.resource.bitmap.CircleCrop
 import com.hellotractor.chatwoot.ChatwootTheme
 import com.hellotractor.chatwoot.R
+import com.hellotractor.chatwoot.domain.model.ChatwootAttachment
 import com.hellotractor.chatwoot.domain.model.ChatwootMessage
 import com.hellotractor.chatwoot.domain.model.ChatwootMessageType
 import java.text.SimpleDateFormat
 import java.util.*
 
 class ChatwootMessageAdapter(
-    private val theme: ChatwootTheme = ChatwootTheme.default()
+    private val theme: ChatwootTheme = ChatwootTheme.default(),
+    private val onAttachmentClick: ((ChatwootAttachment) -> Unit)? = null
 ) : ListAdapter<ChatwootMessageItem, RecyclerView.ViewHolder>(DIFF_CALLBACK) {
 
     companion object {
         private const val VIEW_TYPE_SENT = 0
         private const val VIEW_TYPE_RECEIVED = 1
         private const val VIEW_TYPE_TYPING = 2
+
+        internal val IMAGE_TYPES = setOf("image", "image/jpeg", "image/png", "image/gif", "image/webp")
 
         private val DIFF_CALLBACK = object : DiffUtil.ItemCallback<ChatwootMessageItem>() {
             override fun areItemsTheSame(oldItem: ChatwootMessageItem, newItem: ChatwootMessageItem): Boolean {
@@ -72,8 +78,8 @@ class ChatwootMessageAdapter(
         when (val item = getItem(position)) {
             is ChatwootMessageItem.Message -> {
                 when (holder) {
-                    is SentViewHolder -> holder.bind(item.message, theme)
-                    is ReceivedViewHolder -> holder.bind(item.message, theme)
+                    is SentViewHolder -> holder.bind(item.message, theme, onAttachmentClick)
+                    is ReceivedViewHolder -> holder.bind(item.message, theme, onAttachmentClick)
                 }
             }
             is ChatwootMessageItem.TypingIndicator -> {}
@@ -84,9 +90,11 @@ class ChatwootMessageAdapter(
         private val messageText: TextView = itemView.findViewById(R.id.tv_message_content)
         private val timeText: TextView = itemView.findViewById(R.id.tv_message_time)
         private val bubbleContainer: View = itemView.findViewById(R.id.bubble_container)
+        private val attachmentImage: ImageView = itemView.findViewById(R.id.iv_attachment_image)
+        private val fileContainer: LinearLayout = itemView.findViewById(R.id.file_attachment_container)
+        private val fileName: TextView = itemView.findViewById(R.id.tv_file_name)
 
-        fun bind(message: ChatwootMessage, theme: ChatwootTheme) {
-            messageText.text = message.content ?: ""
+        fun bind(message: ChatwootMessage, theme: ChatwootTheme, onAttachmentClick: ((ChatwootAttachment) -> Unit)?) {
             messageText.setTextColor(theme.sentMessageTextColor)
 
             val bg = bubbleContainer.background
@@ -98,6 +106,18 @@ class ChatwootMessageAdapter(
                     cornerRadius = 16f * itemView.resources.displayMetrics.density
                 }
                 bubbleContainer.background = drawable
+            }
+
+            // Bind attachments
+            bindAttachments(message, attachmentImage, fileContainer, fileName, onAttachmentClick)
+
+            // Show text content (hide if empty and has attachment)
+            val hasAttachment = message.attachments.isNotEmpty()
+            if (message.content.isNullOrBlank() && hasAttachment) {
+                messageText.visibility = View.GONE
+            } else {
+                messageText.visibility = View.VISIBLE
+                messageText.text = message.content ?: ""
             }
 
             if (theme.showTimestamps) {
@@ -116,9 +136,11 @@ class ChatwootMessageAdapter(
         private val senderName: TextView = itemView.findViewById(R.id.tv_sender_name)
         private val avatarImage: ImageView = itemView.findViewById(R.id.iv_avatar)
         private val bubbleContainer: View = itemView.findViewById(R.id.bubble_container)
+        private val attachmentImage: ImageView = itemView.findViewById(R.id.iv_attachment_image)
+        private val fileContainer: LinearLayout = itemView.findViewById(R.id.file_attachment_container)
+        private val fileName: TextView = itemView.findViewById(R.id.tv_file_name)
 
-        fun bind(message: ChatwootMessage, theme: ChatwootTheme) {
-            messageText.text = message.content ?: ""
+        fun bind(message: ChatwootMessage, theme: ChatwootTheme, onAttachmentClick: ((ChatwootAttachment) -> Unit)?) {
             messageText.setTextColor(theme.receivedMessageTextColor)
 
             val bg = bubbleContainer.background
@@ -132,14 +154,42 @@ class ChatwootMessageAdapter(
                 bubbleContainer.background = drawable
             }
 
-            if (message.sender?.name != null) {
+            // Agent name
+            if (theme.showAgentName && message.sender?.name != null) {
                 senderName.visibility = View.VISIBLE
                 senderName.text = message.sender.name
             } else {
                 senderName.visibility = View.GONE
             }
 
-            avatarImage.visibility = if (theme.showAgentAvatar) View.VISIBLE else View.GONE
+            // Agent avatar via Glide
+            if (theme.showAgentAvatar) {
+                avatarImage.visibility = View.VISIBLE
+                if (!message.sender?.avatarUrl.isNullOrBlank()) {
+                    Glide.with(itemView)
+                        .load(message.sender?.avatarUrl)
+                        .transform(CircleCrop())
+                        .placeholder(R.drawable.ic_chatwoot_agent_avatar)
+                        .error(R.drawable.ic_chatwoot_agent_avatar)
+                        .into(avatarImage)
+                } else {
+                    avatarImage.setImageResource(R.drawable.ic_chatwoot_agent_avatar)
+                }
+            } else {
+                avatarImage.visibility = View.GONE
+            }
+
+            // Bind attachments
+            bindAttachments(message, attachmentImage, fileContainer, fileName, onAttachmentClick)
+
+            // Show text content (hide if empty and has attachment)
+            val hasAttachment = message.attachments.isNotEmpty()
+            if (message.content.isNullOrBlank() && hasAttachment) {
+                messageText.visibility = View.GONE
+            } else {
+                messageText.visibility = View.VISIBLE
+                messageText.text = message.content ?: ""
+            }
 
             if (theme.showTimestamps) {
                 timeText.visibility = View.VISIBLE
@@ -152,6 +202,45 @@ class ChatwootMessageAdapter(
     }
 
     class TypingViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView)
+}
+
+private fun bindAttachments(
+    message: ChatwootMessage,
+    attachmentImage: ImageView,
+    fileContainer: LinearLayout,
+    fileName: TextView,
+    onAttachmentClick: ((ChatwootAttachment) -> Unit)?
+) {
+    val attachment = message.attachments.firstOrNull()
+    if (attachment == null) {
+        attachmentImage.visibility = View.GONE
+        fileContainer.visibility = View.GONE
+        return
+    }
+
+    val isImage = ChatwootMessageAdapter.IMAGE_TYPES.any {
+        attachment.fileType?.contains(it, ignoreCase = true) == true
+    }
+
+    if (isImage && !attachment.dataUrl.isNullOrBlank()) {
+        attachmentImage.visibility = View.VISIBLE
+        fileContainer.visibility = View.GONE
+        Glide.with(attachmentImage)
+            .load(attachment.thumbUrl ?: attachment.dataUrl)
+            .placeholder(android.R.drawable.ic_menu_gallery)
+            .error(android.R.drawable.ic_menu_gallery)
+            .into(attachmentImage)
+        attachmentImage.setOnClickListener { onAttachmentClick?.invoke(attachment) }
+    } else if (!attachment.dataUrl.isNullOrBlank()) {
+        attachmentImage.visibility = View.GONE
+        fileContainer.visibility = View.VISIBLE
+        val name = attachment.dataUrl.substringAfterLast('/')
+        fileName.text = name
+        fileContainer.setOnClickListener { onAttachmentClick?.invoke(attachment) }
+    } else {
+        attachmentImage.visibility = View.GONE
+        fileContainer.visibility = View.GONE
+    }
 }
 
 sealed class ChatwootMessageItem {

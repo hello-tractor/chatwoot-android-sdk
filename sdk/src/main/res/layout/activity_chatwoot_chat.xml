@@ -78,9 +78,50 @@
         android:clipToPadding="false"
         android:padding="8dp"
         app:layout_constraintTop_toBottomOf="@id/error_container"
-        app:layout_constraintBottom_toTopOf="@id/input_container"
+        app:layout_constraintBottom_toTopOf="@id/attachment_preview_container"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent" />
+
+    <LinearLayout
+        android:id="@+id/attachment_preview_container"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:padding="8dp"
+        android:background="#FFF5F5F5"
+        android:visibility="gone"
+        app:layout_constraintBottom_toTopOf="@id/input_container"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent">
+
+        <ImageView
+            android:id="@+id/iv_attachment_preview"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:scaleType="centerCrop"
+            android:contentDescription="@string/chatwoot_attachment" />
+
+        <TextView
+            android:id="@+id/tv_attachment_name"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginStart="8dp"
+            android:textSize="13sp"
+            android:maxLines="1"
+            android:ellipsize="middle"
+            tools:text="photo.jpg" />
+
+        <ImageView
+            android:id="@+id/btn_remove_attachment"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:padding="6dp"
+            android:src="@android:drawable/ic_menu_close_clear_cancel"
+            android:contentDescription="@string/chatwoot_remove_attachment"
+            android:background="?attr/selectableItemBackgroundBorderless" />
+    </LinearLayout>
 
     <LinearLayout
         android:id="@+id/input_container"
@@ -93,6 +134,15 @@
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent">
+
+        <ImageView
+            android:id="@+id/btn_attach"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:padding="8dp"
+            android:src="@drawable/ic_chatwoot_attach"
+            android:contentDescription="@string/chatwoot_attach"
+            android:background="?attr/selectableItemBackgroundBorderless" />
 
         <EditText
             android:id="@+id/et_message"

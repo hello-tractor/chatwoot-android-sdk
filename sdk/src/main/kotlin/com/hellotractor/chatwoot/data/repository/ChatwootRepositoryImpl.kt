@@ -1,6 +1,10 @@
 package com.hellotractor.chatwoot.data.repository
 
+import android.content.ContentResolver
 import android.content.SharedPreferences
+import android.net.Uri
+import android.provider.OpenableColumns
+import android.webkit.MimeTypeMap
 import com.hellotractor.chatwoot.data.local.dao.ChatwootContactDao
 import com.hellotractor.chatwoot.data.local.dao.ChatwootConversationDao
 import com.hellotractor.chatwoot.data.local.dao.ChatwootMessageDao
@@ -13,14 +17,22 @@ import com.hellotractor.chatwoot.util.ChatwootConstants
 import com.hellotractor.chatwoot.util.ChatwootError
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
+import okhttp3.MultipartBody
+import okhttp3.RequestBody.Companion.toRequestBody
 
 class ChatwootRepositoryImpl(
     private val apiService: ChatwootApiService,
     private val messageDao: ChatwootMessageDao,
     private val contactDao: ChatwootContactDao,
     private val conversationDao: ChatwootConversationDao,
-    private val prefs: SharedPreferences
+    private val prefs: SharedPreferences,
+    private val contentResolver: ContentResolver
 ) : ChatwootRepository {
+
+    companion object {
+        private const val MAX_ATTACHMENT_SIZE_BYTES = 15L * 1024 * 1024 // 15MB
+    }
 
     override suspend fun createContact(user: ChatwootUser): Result<ChatwootContact> = apiCall {
         val response = apiService.createContact(user.toCreateRequest())
@@ -100,6 +112,71 @@ class ChatwootRepositoryImpl(
         }
     }
 
+    override suspend fun sendMessageWithAttachment(
+        contactId: String,
+        conversationId: Int,
+        content: String,
+        echoId: String,
+        fileUri: Uri
+    ): Result<ChatwootMessage> = apiCall {
+        val mimeType = contentResolver.getType(fileUri) ?: "application/octet-stream"
+        val fileName = getFileName(fileUri) ?: "attachment"
+
+        // Check file size before reading into memory (15MB max)
+        val fileSize = getFileSize(fileUri)
+        if (fileSize != null && fileSize > MAX_ATTACHMENT_SIZE_BYTES) {
+            return@apiCall Result.failure(
+                ChatwootError.SendMessageError("File too large. Maximum size is ${MAX_ATTACHMENT_SIZE_BYTES / (1024 * 1024)}MB")
+            )
+        }
+
+        val inputStream = contentResolver.openInputStream(fileUri)
+            ?: return@apiCall Result.failure(ChatwootError.SendMessageError("Cannot read file"))
+        val fileBytes = inputStream.use { it.readBytes() }
+
+        val fileBody = fileBytes.toRequestBody(mimeType.toMediaTypeOrNull())
+        val filePart = MultipartBody.Part.createFormData("attachments[]", fileName, fileBody)
+        val contentBody = content.toRequestBody("text/plain".toMediaTypeOrNull())
+        val echoIdBody = echoId.toRequestBody("text/plain".toMediaTypeOrNull())
+
+        val response = apiService.sendMessageWithAttachment(
+            contactId, conversationId, contentBody, echoIdBody, listOf(filePart)
+        )
+        if (response.isSuccessful) {
+            val dto = response.body() ?: return@apiCall Result.failure(ChatwootError.SendMessageError())
+            val message = dto.toDomain()
+            persistMessage(message)
+            Result.success(message)
+        } else {
+            Result.failure(ChatwootError.ApiError(response.code(), response.message()))
+        }
+    }
+
+    private fun getFileName(uri: Uri): String? {
+        var name: String? = null
+        if (uri.scheme == "content") {
+            contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+                if (cursor.moveToFirst()) {
+                    val index = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                    if (index >= 0) name = cursor.getString(index)
+                }
+            }
+        }
+        return name ?: uri.lastPathSegment
+    }
+
+    private fun getFileSize(uri: Uri): Long? {
+        if (uri.scheme == "content") {
+            contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+                if (cursor.moveToFirst()) {
+                    val index = cursor.getColumnIndex(OpenableColumns.SIZE)
+                    if (index >= 0 && !cursor.isNull(index)) return cursor.getLong(index)
+                }
+            }
+        }
+        return null
+    }
+
     override suspend fun getMessages(contactId: String, conversationId: Int): Result<List<ChatwootMessage>> = apiCall {
         val response = apiService.getMessages(contactId, conversationId)
         if (response.isSuccessful) {
@@ -119,6 +196,12 @@ class ChatwootRepositoryImpl(
 
     override suspend fun getPersistedMessages(conversationId: Int): List<ChatwootMessage> =
         messageDao.getMessages(conversationId).map { it.toDomain() }
+
+    override suspend fun getPersistedMessagesPaged(conversationId: Int, limit: Int, offset: Int): List<ChatwootMessage> =
+        messageDao.getMessagesPaged(conversationId, limit, offset).map { it.toDomain() }
+
+    override suspend fun getMessageCount(conversationId: Int): Int =
+        messageDao.getMessageCount(conversationId)
 
     override suspend fun persistMessages(messages: List<ChatwootMessage>) {
         messageDao.upsertAll(messages.map { it.toEntity() })
@@ -172,6 +255,14 @@ class ChatwootRepositoryImpl(
     override fun getConversationId(): Int? {
         val id = prefs.getInt(ChatwootConstants.KEY_CONVERSATION_ID, -1)
         return if (id == -1) null else id
+    }
+
+    override suspend fun deleteOldMessages(beforeEpochSeconds: Long) {
+        messageDao.deleteOlderThan(beforeEpochSeconds)
+    }
+
+    override suspend fun trimMessages(conversationId: Int, keepCount: Int) {
+        messageDao.trimToCount(conversationId, keepCount)
     }
 
     override fun clearSession() {

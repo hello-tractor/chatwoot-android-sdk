@@ -7,4 +7,9 @@
     <string name="chatwoot_disconnected">Disconnected. Tap to retry.</string>
     <string name="chatwoot_agent_avatar">Agent avatar</string>
     <string name="chatwoot_message_hint">Type a message\u2026</string>
+    <string name="chatwoot_attach">Attach file</string>
+    <string name="chatwoot_attachment">Attachment</string>
+    <string name="chatwoot_remove_attachment">Remove attachment</string>
+    <string name="chatwoot_close">Close</string>
+    <string name="chatwoot_loading_more">Loading older messages\u2026</string>
 </resources>

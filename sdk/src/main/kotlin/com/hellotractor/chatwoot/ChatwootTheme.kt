@@ -24,6 +24,7 @@ data class ChatwootTheme(
     val fontFamily: String? = null,
     val showToolbarLogo: Boolean = false,
     val showAgentAvatar: Boolean = true,
+    val showAgentName: Boolean = true,
     val showTimestamps: Boolean = true,
     val dateFormat: String = "hh:mm a"
 ) {
@@ -33,7 +34,9 @@ data class ChatwootTheme(
             primaryDarkColor = 0xFF003300.toInt(),
             accentColor = 0xFF4CAF50.toInt(),
             toolbarTitle = "Hello Tractor Support",
-            showToolbarLogo = true
+            showToolbarLogo = true,
+            showAgentName = true,
+            showAgentAvatar = true
         )
 
         fun default(): ChatwootTheme = ChatwootTheme()

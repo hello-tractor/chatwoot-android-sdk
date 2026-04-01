@@ -1,5 +1,6 @@
 package com.hellotractor.chatwoot.domain.usecase
 
+import android.net.Uri
 import com.hellotractor.chatwoot.domain.model.ChatwootMessage
 import com.hellotractor.chatwoot.domain.model.ChatwootMessageType
 import com.hellotractor.chatwoot.domain.repository.ChatwootRepository
@@ -11,13 +12,14 @@ class SendMessageUseCase(
     suspend operator fun invoke(
         contactId: String,
         conversationId: Int,
-        content: String
+        content: String,
+        attachmentUri: Uri? = null
     ): Result<ChatwootMessage> {
         val echoId = UUID.randomUUID().toString()
 
         val optimistic = ChatwootMessage(
-            id = echoId.hashCode(),
-            content = content,
+            id = -kotlin.math.abs(echoId.hashCode()),
+            content = content.ifBlank { if (attachmentUri != null) "Sending attachment..." else "" },
             messageType = ChatwootMessageType.OUTGOING,
             createdAt = System.currentTimeMillis() / 1000,
             conversationId = conversationId,
@@ -25,7 +27,12 @@ class SendMessageUseCase(
         )
         repository.persistMessage(optimistic)
 
-        val result = repository.sendMessage(contactId, conversationId, content, echoId)
+        val result = if (attachmentUri != null) {
+            repository.sendMessageWithAttachment(contactId, conversationId, content, echoId, attachmentUri)
+        } else {
+            repository.sendMessage(contactId, conversationId, content, echoId)
+        }
+
         if (result.isSuccess) {
             repository.persistMessage(result.getOrThrow())
         }

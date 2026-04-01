@@ -1,5 +1,6 @@
 package com.hellotractor.chatwoot.domain.repository
 
+import android.net.Uri
 import com.hellotractor.chatwoot.domain.model.*
 import kotlinx.coroutines.flow.Flow
 
@@ -10,16 +11,22 @@ interface ChatwootRepository {
     suspend fun createConversation(contactId: String): Result<ChatwootConversation>
     suspend fun getConversations(contactId: String): Result<List<ChatwootConversation>>
     suspend fun sendMessage(contactId: String, conversationId: Int, content: String, echoId: String): Result<ChatwootMessage>
+    suspend fun sendMessageWithAttachment(contactId: String, conversationId: Int, content: String, echoId: String, fileUri: Uri): Result<ChatwootMessage>
     suspend fun getMessages(contactId: String, conversationId: Int): Result<List<ChatwootMessage>>
 
     fun observeMessages(conversationId: Int): Flow<List<ChatwootMessage>>
     suspend fun getPersistedMessages(conversationId: Int): List<ChatwootMessage>
+    suspend fun getPersistedMessagesPaged(conversationId: Int, limit: Int, offset: Int): List<ChatwootMessage>
+    suspend fun getMessageCount(conversationId: Int): Int
     suspend fun persistMessages(messages: List<ChatwootMessage>)
     suspend fun persistMessage(message: ChatwootMessage)
     suspend fun persistContact(contact: ChatwootContact)
     suspend fun persistConversation(conversation: ChatwootConversation)
     suspend fun getPersistedContact(): ChatwootContact?
     suspend fun getPersistedConversation(): ChatwootConversation?
+
+    suspend fun deleteOldMessages(beforeEpochSeconds: Long)
+    suspend fun trimMessages(conversationId: Int, keepCount: Int)
 
     fun saveContactIdentifier(identifier: String)
     fun getContactIdentifier(): String?

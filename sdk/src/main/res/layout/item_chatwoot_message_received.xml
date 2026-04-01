@@ -43,6 +43,43 @@
             android:background="@drawable/chatwoot_bubble_received"
             android:padding="12dp">
 
+            <ImageView
+                android:id="@+id/iv_attachment_image"
+                android:layout_width="200dp"
+                android:layout_height="150dp"
+                android:scaleType="centerCrop"
+                android:visibility="gone"
+                android:contentDescription="@string/chatwoot_attachment"
+                tools:visibility="gone" />
+
+            <LinearLayout
+                android:id="@+id/file_attachment_container"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:visibility="gone"
+                android:paddingBottom="4dp"
+                tools:visibility="gone">
+
+                <ImageView
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:layout_marginEnd="8dp"
+                    android:src="@drawable/ic_chatwoot_file"
+                    android:contentDescription="@string/chatwoot_attachment" />
+
+                <TextView
+                    android:id="@+id/tv_file_name"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:textSize="13sp"
+                    android:maxLines="1"
+                    android:ellipsize="middle"
+                    tools:text="document.pdf" />
+            </LinearLayout>
+
             <TextView
                 android:id="@+id/tv_message_content"
                 android:layout_width="wrap_content"

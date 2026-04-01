@@ -15,4 +15,8 @@ internal object ChatwootConstants {
 
     const val ACTION_CABLE_COMMAND_SUBSCRIBE = "subscribe"
     const val ACTION_CABLE_COMMAND_MESSAGE = "message"
+
+    const val MESSAGES_PAGE_SIZE = 50
+    const val MESSAGES_MAX_PER_CONVERSATION = 500
+    const val MESSAGES_RETENTION_DAYS = 90L
 }

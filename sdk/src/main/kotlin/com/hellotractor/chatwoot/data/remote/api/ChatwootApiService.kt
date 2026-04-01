@@ -6,6 +6,8 @@ import com.hellotractor.chatwoot.data.remote.dto.ChatwootMessageDto
 import com.hellotractor.chatwoot.data.remote.request.CreateContactRequest
 import com.hellotractor.chatwoot.data.remote.request.SendMessageRequest
 import com.hellotractor.chatwoot.data.remote.request.UpdateContactRequest
+import okhttp3.MultipartBody
+import okhttp3.RequestBody
 import retrofit2.Response
 import retrofit2.http.*
 
@@ -42,6 +44,16 @@ interface ChatwootApiService {
         @Path("contactId") contactId: String,
         @Path("conversationId") conversationId: Int,
         @Body request: SendMessageRequest
+    ): Response<ChatwootMessageDto>
+
+    @Multipart
+    @POST("contacts/{contactId}/conversations/{conversationId}/messages")
+    suspend fun sendMessageWithAttachment(
+        @Path("contactId") contactId: String,
+        @Path("conversationId") conversationId: Int,
+        @Part("content") content: RequestBody,
+        @Part("echo_id") echoId: RequestBody,
+        @Part attachments: List<MultipartBody.Part>
     ): Response<ChatwootMessageDto>
 
     @GET("contacts/{contactId}/conversations/{conversationId}/messages")

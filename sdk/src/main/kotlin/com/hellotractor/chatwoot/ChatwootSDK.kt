@@ -125,7 +125,8 @@ internal class ChatwootDependencies(context: Context, val config: ChatwootConfig
         messageDao = messageDao,
         contactDao = contactDao,
         conversationDao = conversationDao,
-        prefs = prefs
+        prefs = prefs,
+        contentResolver = context.contentResolver
     )
 
     val initializeUseCase: InitializeChatwootUseCase = InitializeChatwootUseCase(repository)
