@@ -3,6 +3,7 @@ package com.hellotractor.chatwoot.presentation
 import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.hellotractor.chatwoot.ChatwootSDK
 import com.hellotractor.chatwoot.data.remote.websocket.ChatwootWebSocketManager
 import com.hellotractor.chatwoot.domain.model.ChatwootUser
 import com.hellotractor.chatwoot.domain.repository.ChatwootRepository
@@ -51,7 +52,7 @@ class ChatwootViewModel(
 
                     val pubsubToken = initResult.contact.pubsubToken
                     if (pubsubToken != null) {
-                        webSocketManager.connect(pubsubToken, initResult.conversation.id)
+                        ChatwootSDK.onSessionEstablished(pubsubToken, initResult.conversation.id)
                         collectWebSocketEvents()
                         collectConnectionState()
                     }
@@ -216,6 +217,6 @@ class ChatwootViewModel(
 
     override fun onCleared() {
         super.onCleared()
-        webSocketManager.disconnect()
+        // WebSocket lifecycle is now managed by ChatwootSDK — don't disconnect here
     }
 }
