@@ -36,5 +36,7 @@ interface ChatwootRepository {
     fun getPubsubToken(): String?
     fun saveConversationId(conversationId: Int)
     fun getConversationId(): Int?
+    fun saveLastSeenAt(epochSeconds: Long)
+    fun getLastSeenAt(): Long
     fun clearSession()
 }

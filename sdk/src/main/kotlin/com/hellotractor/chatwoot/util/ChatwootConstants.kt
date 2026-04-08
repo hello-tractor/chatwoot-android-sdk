@@ -6,6 +6,7 @@ internal object ChatwootConstants {
     const val KEY_CONTACT_ID = "contact_id"
     const val KEY_PUBSUB_TOKEN = "pubsub_token"
     const val KEY_CONVERSATION_ID = "conversation_id"
+    const val KEY_LAST_SEEN_AT = "last_seen_at"
 
     const val DATABASE_NAME = "chatwoot_sdk_database"
 

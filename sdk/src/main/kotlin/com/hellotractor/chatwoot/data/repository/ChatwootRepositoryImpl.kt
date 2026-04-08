@@ -257,6 +257,13 @@ class ChatwootRepositoryImpl(
         return if (id == -1) null else id
     }
 
+    override fun saveLastSeenAt(epochSeconds: Long) {
+        prefs.edit().putLong(ChatwootConstants.KEY_LAST_SEEN_AT, epochSeconds).apply()
+    }
+
+    override fun getLastSeenAt(): Long =
+        prefs.getLong(ChatwootConstants.KEY_LAST_SEEN_AT, 0L)
+
     override suspend fun deleteOldMessages(beforeEpochSeconds: Long) {
         messageDao.deleteOlderThan(beforeEpochSeconds)
     }
