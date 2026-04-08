@@ -1,12 +1,18 @@
 package com.hellotractor.chatwoot.sample
 
 import android.os.Bundle
+import android.view.View
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import com.hellotractor.chatwoot.ChatwootLauncher
+import com.hellotractor.chatwoot.ChatwootSDK
 import com.hellotractor.chatwoot.ChatwootTheme
 import com.hellotractor.chatwoot.domain.model.ChatwootUser
 import com.hellotractor.chatwoot.sample.databinding.ActivityMainBinding
+import kotlinx.coroutines.launch
 
 class MainActivity : AppCompatActivity() {
 
@@ -23,6 +29,25 @@ class MainActivity : AppCompatActivity() {
 
         binding.btnLaunchChatHelloTractor.setOnClickListener {
             launchChatWithHelloTractorTheme()
+        }
+
+        observeUnreadState()
+    }
+
+    private fun observeUnreadState() {
+        if (!ChatwootSDK.isInitialized) return
+
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                ChatwootSDK.unreadState.collect { state ->
+                    if (state.hasUnread) {
+                        binding.tvUnreadBadge.text = state.count.toString()
+                        binding.tvUnreadBadge.visibility = View.VISIBLE
+                    } else {
+                        binding.tvUnreadBadge.visibility = View.GONE
+                    }
+                }
+            }
         }
     }
 
