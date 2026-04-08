@@ -21,6 +21,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.bumptech.glide.Glide
+import com.hellotractor.chatwoot.ChatwootSDK
 import com.hellotractor.chatwoot.ChatwootTheme
 import com.hellotractor.chatwoot.R
 import com.hellotractor.chatwoot.databinding.ActivityChatwootChatBinding
@@ -75,6 +76,16 @@ class ChatwootChatActivity : AppCompatActivity() {
         collectState()
         collectEffects()
         initializeChat()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        ChatwootSDK.onChatOpened()
+    }
+
+    override fun onPause() {
+        super.onPause()
+        ChatwootSDK.onChatClosed()
     }
 
     private fun setupToolbar() {
