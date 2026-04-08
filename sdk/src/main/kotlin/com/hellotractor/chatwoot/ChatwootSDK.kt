@@ -4,6 +4,9 @@ import android.content.Context
 import android.content.SharedPreferences
 import android.os.Build
 import android.util.Log
+import androidx.lifecycle.DefaultLifecycleObserver
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.ProcessLifecycleOwner
 import androidx.room.Room
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
@@ -15,12 +18,19 @@ import com.hellotractor.chatwoot.data.local.dao.ChatwootMessageDao
 import com.hellotractor.chatwoot.data.remote.api.ChatwootApiService
 import com.hellotractor.chatwoot.data.remote.websocket.ChatwootWebSocketManager
 import com.hellotractor.chatwoot.data.repository.ChatwootRepositoryImpl
+import com.hellotractor.chatwoot.domain.ChatwootUnreadManager
+import com.hellotractor.chatwoot.domain.model.ChatwootUnreadState
 import com.hellotractor.chatwoot.domain.repository.ChatwootRepository
 import com.hellotractor.chatwoot.domain.usecase.InitializeChatwootUseCase
 import com.hellotractor.chatwoot.domain.usecase.LoadMessagesUseCase
 import com.hellotractor.chatwoot.domain.usecase.SendActionUseCase
 import com.hellotractor.chatwoot.domain.usecase.SendMessageUseCase
 import com.hellotractor.chatwoot.util.ChatwootConstants
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.StateFlow
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
@@ -50,6 +60,10 @@ object ChatwootSDK {
     @Volatile
     private var _instance: ChatwootDependencies? = null
 
+    private var sdkScope: CoroutineScope? = null
+    private var unreadManager: ChatwootUnreadManager? = null
+    private var lifecycleObserver: DefaultLifecycleObserver? = null
+
     val isInitialized: Boolean get() = _instance != null
 
     internal val dependencies: ChatwootDependencies
@@ -57,16 +71,84 @@ object ChatwootSDK {
             "ChatwootSDK is not initialized. Call ChatwootSDK.init(context, config) first."
         )
 
+    val unreadState: StateFlow<ChatwootUnreadState>
+        get() = unreadManager?.unreadState
+            ?: throw IllegalStateException(
+                "ChatwootSDK is not initialized. Call ChatwootSDK.init(context, config) first."
+            )
+
     fun init(context: Context, config: ChatwootConfig) {
         if (_instance != null) return
         synchronized(this) {
             if (_instance != null) return
-            _instance = ChatwootDependencies(context.applicationContext, config)
+            val deps = ChatwootDependencies(context.applicationContext, config)
+            _instance = deps
+
+            val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+            sdkScope = scope
+
+            val manager = ChatwootUnreadManager(
+                webSocketManager = deps.webSocketManager,
+                repository = deps.repository,
+                scope = scope
+            )
+            unreadManager = manager
+            manager.startListening()
+
+            connectIfSessionExists(deps)
+            observeAppLifecycle(deps)
+        }
+    }
+
+    private fun connectIfSessionExists(deps: ChatwootDependencies) {
+        val pubsubToken = deps.repository.getPubsubToken()
+        val conversationId = deps.repository.getConversationId()
+        if (pubsubToken != null && conversationId != null) {
+            deps.webSocketManager.connect(pubsubToken, conversationId)
+        }
+    }
+
+    private fun observeAppLifecycle(deps: ChatwootDependencies) {
+        val observer = object : DefaultLifecycleObserver {
+            override fun onStart(owner: LifecycleOwner) {
+                // App came to foreground — reconnect WebSocket if we have a session
+                connectIfSessionExists(deps)
+            }
+
+            override fun onStop(owner: LifecycleOwner) {
+                // App went to background — disconnect to save battery
+                deps.webSocketManager.disconnect()
+            }
+        }
+        lifecycleObserver = observer
+        ProcessLifecycleOwner.get().lifecycle.addObserver(observer)
+    }
+
+    internal fun onChatOpened() {
+        unreadManager?.isChatOpen = true
+        unreadManager?.markSeen()
+    }
+
+    internal fun onChatClosed() {
+        unreadManager?.isChatOpen = false
+    }
+
+    internal fun onSessionEstablished(pubsubToken: String, conversationId: Int) {
+        val deps = _instance ?: return
+        if (deps.webSocketManager.connectionState.value == com.hellotractor.chatwoot.util.ConnectionState.DISCONNECTED) {
+            deps.webSocketManager.connect(pubsubToken, conversationId)
         }
     }
 
     fun destroy() {
+        lifecycleObserver?.let {
+            ProcessLifecycleOwner.get().lifecycle.removeObserver(it)
+        }
+        lifecycleObserver = null
         _instance?.webSocketManager?.destroy()
+        sdkScope?.cancel()
+        sdkScope = null
+        unreadManager = null
         _instance = null
     }
 }
