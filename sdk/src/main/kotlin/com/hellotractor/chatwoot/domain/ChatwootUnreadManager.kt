@@ -12,6 +12,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
+// All public methods must be called from the main thread.
+// startListening() collects on the provided scope which must use Dispatchers.Main.
 internal class ChatwootUnreadManager(
     private val webSocketManager: ChatwootWebSocketManager,
     private val repository: ChatwootRepository,
@@ -19,6 +21,7 @@ internal class ChatwootUnreadManager(
 ) {
     companion object {
         private const val MAX_PREVIEW_MESSAGES = 3
+        private const val MAX_TRACKED_MESSAGES = 100
     }
 
     private val _unreadState = MutableStateFlow(ChatwootUnreadState())
@@ -26,7 +29,6 @@ internal class ChatwootUnreadManager(
 
     private val unreadMessages = mutableListOf<ChatwootMessage>()
 
-    @Volatile
     var isChatOpen: Boolean = false
 
     fun startListening() {
@@ -57,8 +59,14 @@ internal class ChatwootUnreadManager(
 
         unreadMessages.add(message)
 
+        // Cap memory usage — keep only the most recent messages, but track full count
+        val totalCount = unreadMessages.size
+        if (unreadMessages.size > MAX_TRACKED_MESSAGES) {
+            unreadMessages.removeAt(0)
+        }
+
         _unreadState.value = ChatwootUnreadState(
-            count = unreadMessages.size,
+            count = totalCount,
             latestMessages = unreadMessages.takeLast(MAX_PREVIEW_MESSAGES)
         )
     }

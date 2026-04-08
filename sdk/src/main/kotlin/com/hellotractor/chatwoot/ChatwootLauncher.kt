@@ -47,7 +47,6 @@ object ChatwootLauncher {
             putExtra(ChatwootChatActivity.EXTRA_USER_AVATAR_URL, user.avatarUrl)
             putExtra(ChatwootChatActivity.EXTRA_USER_IDENTIFIER_HASH, user.identifierHash)
         }
-        ChatwootSDK.onChatOpened()
         context.startActivity(intent)
     }
 }
