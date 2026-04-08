@@ -14,7 +14,8 @@ internal class ChatwootViewModelFactory : ViewModelProvider.Factory {
                 loadMessagesUseCase = deps.loadMessagesUseCase,
                 sendMessageUseCase = deps.sendMessageUseCase,
                 sendActionUseCase = deps.sendActionUseCase,
-                webSocketManager = deps.webSocketManager
+                webSocketManager = deps.webSocketManager,
+                repository = deps.repository
             ) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class: ${modelClass.name}")

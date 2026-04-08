@@ -11,7 +11,7 @@ class InitializeChatwootUseCase(
 ) {
     data class InitResult(
         val contact: ChatwootContact,
-        val conversation: ChatwootConversation
+        val conversation: ChatwootConversation?
     )
 
     suspend operator fun invoke(user: ChatwootUser): Result<InitResult> {
@@ -19,15 +19,17 @@ class InitializeChatwootUseCase(
         val savedConversationId = repository.getConversationId()
         val savedPubsubToken = repository.getPubsubToken()
 
-        if (savedContactIdentifier != null && savedConversationId != null && savedPubsubToken != null) {
+        if (savedContactIdentifier != null && savedPubsubToken != null) {
             val contactResult = repository.getContact(savedContactIdentifier)
             if (contactResult.isSuccess) {
                 val contact = contactResult.getOrThrow()
-                val persistedConversation = repository.getPersistedConversation()
-                if (persistedConversation != null) {
-                    return Result.success(InitResult(contact, persistedConversation))
+                if (savedConversationId != null) {
+                    val persistedConversation = repository.getPersistedConversation()
+                    if (persistedConversation != null) {
+                        return Result.success(InitResult(contact, persistedConversation))
+                    }
                 }
-                return fetchOrCreateConversation(savedContactIdentifier, contact)
+                return fetchExistingConversation(savedContactIdentifier, contact)
             }
             // Contact gone — fall through to re-create
         }
@@ -45,10 +47,10 @@ class InitializeChatwootUseCase(
         val contact = contactResult.getOrThrow()
         val contactId = contact.contactIdentifier ?: contact.id.toString()
 
-        return fetchOrCreateConversation(contactId, contact)
+        return fetchExistingConversation(contactId, contact)
     }
 
-    private suspend fun fetchOrCreateConversation(
+    private suspend fun fetchExistingConversation(
         contactId: String,
         contact: ChatwootContact
     ): Result<InitResult> {
@@ -65,11 +67,7 @@ class InitializeChatwootUseCase(
             }
         }
 
-        val conversationResult = repository.createConversation(contactId)
-        if (conversationResult.isFailure) {
-            return Result.failure(conversationResult.exceptionOrNull() ?: ChatwootError.UnknownError())
-        }
-        val conversation = conversationResult.getOrThrow()
-        return Result.success(InitResult(contact, conversation))
+        // No existing conversation — don't create one yet, wait for first message
+        return Result.success(InitResult(contact, null))
     }
 }

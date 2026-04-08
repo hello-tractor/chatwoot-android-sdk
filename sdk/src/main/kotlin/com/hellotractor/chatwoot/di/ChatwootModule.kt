@@ -38,6 +38,6 @@ fun chatwootModule(config: ChatwootConfig) = module {
     single { ChatwootSDK.dependencies.sendActionUseCase }
 
     viewModel {
-        ChatwootViewModel(get(), get(), get(), get(), get())
+        ChatwootViewModel(get(), get(), get(), get(), get(), get())
     }
 }

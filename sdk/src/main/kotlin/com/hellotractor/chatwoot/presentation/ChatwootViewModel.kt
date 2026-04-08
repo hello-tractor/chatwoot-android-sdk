@@ -24,7 +24,8 @@ class ChatwootViewModel(
     private val loadMessagesUseCase: LoadMessagesUseCase,
     private val sendMessageUseCase: SendMessageUseCase,
     private val sendActionUseCase: SendActionUseCase,
-    private val webSocketManager: ChatwootWebSocketManager
+    private val webSocketManager: ChatwootWebSocketManager,
+    private val repository: ChatwootRepository
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(ChatwootUiState())
@@ -35,6 +36,7 @@ class ChatwootViewModel(
 
     private var contactId: String? = null
     private var conversationId: Int? = null
+    private var pubsubToken: String? = null
 
     fun initialize(user: ChatwootUser) {
         if (_state.value.isInitialized) return
@@ -46,19 +48,25 @@ class ChatwootViewModel(
             result.fold(
                 onSuccess = { initResult ->
                     contactId = initResult.contact.contactIdentifier ?: initResult.contact.id.toString()
-                    conversationId = initResult.conversation.id
+                    pubsubToken = initResult.contact.pubsubToken
 
-                    _state.update { it.copy(isInitialized = true, isLoading = false) }
+                    val conversation = initResult.conversation
+                    if (conversation != null) {
+                        conversationId = conversation.id
+                        _state.update { it.copy(isInitialized = true, isLoading = false) }
 
-                    val pubsubToken = initResult.contact.pubsubToken
-                    if (pubsubToken != null) {
-                        ChatwootSDK.onSessionEstablished(pubsubToken, initResult.conversation.id)
-                        collectWebSocketEvents()
-                        collectConnectionState()
+                        if (pubsubToken != null) {
+                            ChatwootSDK.onSessionEstablished(pubsubToken!!, conversation.id)
+                            collectWebSocketEvents()
+                            collectConnectionState()
+                        }
+
+                        loadMessages()
+                        observeMessages(conversation.id)
+                    } else {
+                        // No conversation yet — show empty chat, create on first send
+                        _state.update { it.copy(isInitialized = true, isLoading = false) }
                     }
-
-                    loadMessages()
-                    observeMessages(initResult.conversation.id)
                 },
                 onFailure = { error ->
                     _state.update { it.copy(isLoading = false, errorMessage = error.message) }
@@ -83,13 +91,38 @@ class ChatwootViewModel(
 
     private fun sendMessage(content: String, attachmentUri: Uri? = null) {
         val cId = contactId ?: return
-        val convId = conversationId ?: return
         val uri = attachmentUri ?: _state.value.pendingAttachmentUri
 
         viewModelScope.launch {
             if (uri != null) {
                 _state.update { it.copy(isUploading = true) }
             }
+
+            // Create conversation on first message if needed
+            if (conversationId == null) {
+                val convResult = repository.createConversation(cId)
+                convResult.fold(
+                    onSuccess = { conversation ->
+                        conversationId = conversation.id
+                        repository.saveConversationId(conversation.id)
+                        repository.persistConversation(conversation)
+
+                        // Now connect WebSocket for this conversation
+                        if (pubsubToken != null) {
+                            ChatwootSDK.onSessionEstablished(pubsubToken!!, conversation.id)
+                            collectWebSocketEvents()
+                            collectConnectionState()
+                        }
+                    },
+                    onFailure = { error ->
+                        _state.update { it.copy(isUploading = false, pendingAttachmentUri = null) }
+                        _effects.send(ChatwootUiEffect.ShowError(error.message ?: "Failed to start conversation"))
+                        return@launch
+                    }
+                )
+            }
+
+            val convId = conversationId ?: return@launch
             val result = sendMessageUseCase(cId, convId, content, uri)
             _state.update { it.copy(isUploading = false, pendingAttachmentUri = null) }
             result.fold(
