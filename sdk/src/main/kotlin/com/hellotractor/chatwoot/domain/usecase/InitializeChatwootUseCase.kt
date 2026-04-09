@@ -49,6 +49,9 @@ class InitializeChatwootUseCase(
         val contact = contactResult.getOrThrow()
         val contactId = contact.contactIdentifier ?: contact.id.toString()
 
+        // POST /contacts doesn't update existing contacts — always PATCH to sync latest fields
+        repository.updateContact(contactId, user)
+
         return fetchExistingConversation(contactId, contact)
     }
 
