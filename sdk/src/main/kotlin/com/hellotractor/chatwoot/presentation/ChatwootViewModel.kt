@@ -126,7 +126,18 @@ class ChatwootViewModel(
             val result = sendMessageUseCase(cId, convId, content, uri)
             _state.update { it.copy(isUploading = false, pendingAttachmentUri = null) }
             result.fold(
-                onSuccess = {
+                onSuccess = { message ->
+                    // Add the sent message to the UI immediately
+                    _state.update { state ->
+                        val updated = state.messages.toMutableList()
+                        val existingIndex = updated.indexOfFirst { it.echoId != null && it.echoId == message.echoId }
+                        if (existingIndex >= 0) {
+                            updated[existingIndex] = message
+                        } else if (updated.none { it.id == message.id }) {
+                            updated.add(message)
+                        }
+                        state.copy(messages = updated)
+                    }
                     _effects.send(ChatwootUiEffect.MessageSent)
                     _effects.send(ChatwootUiEffect.ScrollToBottom)
                 },

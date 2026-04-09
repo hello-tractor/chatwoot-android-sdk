@@ -23,8 +23,8 @@ class InitializeChatwootUseCase(
             val contactResult = repository.getContact(savedContactIdentifier)
             if (contactResult.isSuccess) {
                 val contact = contactResult.getOrThrow()
-                // Update contact with latest user data (phone, name, email, avatar, etc.)
-                repository.updateContact(savedContactIdentifier, user)
+                // Sync latest user data to Chatwoot (POST doesn't update existing contacts)
+                syncContactData(savedContactIdentifier, user)
                 if (savedConversationId != null) {
                     val persistedConversation = repository.getPersistedConversation()
                     if (persistedConversation != null) {
@@ -50,9 +50,16 @@ class InitializeChatwootUseCase(
         val contactId = contact.contactIdentifier ?: contact.id.toString()
 
         // POST /contacts doesn't update existing contacts — always PATCH to sync latest fields
-        repository.updateContact(contactId, user)
+        syncContactData(contactId, user)
 
         return fetchExistingConversation(contactId, contact)
+    }
+
+    private suspend fun syncContactData(contactId: String, user: ChatwootUser) {
+        val result = repository.updateContact(contactId, user)
+        if (result.isFailure) {
+            android.util.Log.w("ChatwootSDK", "Failed to sync contact data: ${result.exceptionOrNull()?.message}")
+        }
     }
 
     private suspend fun fetchExistingConversation(
