@@ -20,7 +20,7 @@ class SendMessageUseCase(
         val optimistic = ChatwootMessage(
             id = -kotlin.math.abs(echoId.hashCode()),
             content = content.ifBlank { if (attachmentUri != null) "Sending attachment..." else "" },
-            messageType = ChatwootMessageType.OUTGOING,
+            messageType = ChatwootMessageType.INCOMING,  // incoming(0) = from contact (user)
             createdAt = System.currentTimeMillis() / 1000,
             conversationId = conversationId,
             echoId = echoId

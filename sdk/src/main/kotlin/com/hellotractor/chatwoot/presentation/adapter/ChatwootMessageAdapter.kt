@@ -51,7 +51,9 @@ class ChatwootMessageAdapter(
     override fun getItemViewType(position: Int): Int {
         return when (val item = getItem(position)) {
             is ChatwootMessageItem.Message -> {
-                if (item.message.messageType == ChatwootMessageType.OUTGOING) VIEW_TYPE_SENT
+                // Chatwoot message_type: 0=incoming (from contact), 1=outgoing (from agent)
+                // From the mobile user's perspective: incoming(0) = I sent it, outgoing(1) = agent sent it
+                if (item.message.messageType == ChatwootMessageType.INCOMING) VIEW_TYPE_SENT
                 else VIEW_TYPE_RECEIVED
             }
             is ChatwootMessageItem.TypingIndicator -> VIEW_TYPE_TYPING

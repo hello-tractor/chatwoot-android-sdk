@@ -26,13 +26,13 @@ class SendMessageUseCaseTest {
 
     @Test
     fun `invoke persists optimistic message before sending`() = runTest {
-        val messageSlot = slot<ChatwootMessage>()
-        coEvery { repository.persistMessage(capture(messageSlot)) } returns Unit
+        val capturedMessages = mutableListOf<ChatwootMessage>()
+        coEvery { repository.persistMessage(capture(capturedMessages)) } returns Unit
         coEvery { repository.sendMessage(any(), any(), any(), any()) } returns Result.success(
             ChatwootMessage(
                 id = 123,
                 content = "Hello",
-                messageType = ChatwootMessageType.OUTGOING,
+                messageType = ChatwootMessageType.INCOMING,
                 createdAt = 1700000000L,
                 conversationId = 50,
                 echoId = "any-echo"
@@ -43,9 +43,9 @@ class SendMessageUseCaseTest {
 
         // First persistMessage call is the optimistic message
         coVerify(atLeast = 1) { repository.persistMessage(any()) }
-        val optimistic = messageSlot.captured
+        val optimistic = capturedMessages.first()
         assertThat(optimistic.content).isEqualTo("Hello")
-        assertThat(optimistic.messageType).isEqualTo(ChatwootMessageType.OUTGOING)
+        assertThat(optimistic.messageType).isEqualTo(ChatwootMessageType.INCOMING)
         assertThat(optimistic.conversationId).isEqualTo(50)
         assertThat(optimistic.echoId).isNotNull()
     }
