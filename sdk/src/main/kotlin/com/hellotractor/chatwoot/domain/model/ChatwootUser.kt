@@ -5,6 +5,7 @@ data class ChatwootUser(
     val identifierHash: String? = null,
     val name: String? = null,
     val email: String? = null,
+    val phone: String? = null,
     val avatarUrl: String? = null,
     val customAttributes: Map<String, Any>? = null
 )

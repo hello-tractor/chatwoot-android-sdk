@@ -113,6 +113,7 @@ fun ChatwootUser.toCreateRequest(): CreateContactRequest = CreateContactRequest(
     identifierHash = identifierHash,
     name = name,
     email = email,
+    phoneNumber = phone,
     avatarUrl = avatarUrl,
     customAttributes = customAttributes
 )
@@ -122,6 +123,7 @@ fun ChatwootUser.toUpdateRequest(): UpdateContactRequest = UpdateContactRequest(
     identifierHash = identifierHash,
     name = name,
     email = email,
+    phoneNumber = phone,
     avatarUrl = avatarUrl,
     customAttributes = customAttributes
 )
