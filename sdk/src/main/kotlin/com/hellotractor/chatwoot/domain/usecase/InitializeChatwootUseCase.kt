@@ -23,6 +23,8 @@ class InitializeChatwootUseCase(
             val contactResult = repository.getContact(savedContactIdentifier)
             if (contactResult.isSuccess) {
                 val contact = contactResult.getOrThrow()
+                // Update contact with latest user data (phone, name, email, avatar, etc.)
+                repository.updateContact(savedContactIdentifier, user)
                 if (savedConversationId != null) {
                     val persistedConversation = repository.getPersistedConversation()
                     if (persistedConversation != null) {
