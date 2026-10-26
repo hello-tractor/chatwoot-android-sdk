@@ -25,5 +25,8 @@ Fixes for chat history going missing and chat failing to load.
   socket are ignored.
 - **Cheaper init.** `ChatwootSDK.init` no longer opens encrypted preferences on the calling thread,
   so it's safe to call from `Application.onCreate` or any thread.
+- **Readable errors.** Network failures show "No internet connection…" instead of the raw exception
+  text, and a new chat no longer shows "Disconnected" before its first message (there's no live
+  connection to have until a conversation exists).
 - **Theme survives recreation.** The theme is passed in the launch Intent instead of a static field,
   so it's kept when Android recreates the chat screen. `ChatwootTheme` is now `Parcelable`.

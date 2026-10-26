@@ -303,8 +303,11 @@ class ChatwootRepositoryImpl(
     private inline fun <T> apiCall(block: () -> Result<T>): Result<T> {
         return try {
             block()
+        } catch (e: java.io.IOException) {
+            // The exception text ("Unable to resolve host ...") is shown to users, so don't pass it on
+            Result.failure(ChatwootError.NetworkError("No internet connection. Check your connection and try again."))
         } catch (e: Exception) {
-            Result.failure(ChatwootError.NetworkError(e.message ?: "Network request failed"))
+            Result.failure(ChatwootError.NetworkError("Something went wrong. Please try again."))
         }
     }
 }

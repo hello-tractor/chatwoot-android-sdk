@@ -14,6 +14,8 @@ data class ChatwootUiState(
     val isAgentTyping: Boolean = false,
     val isAgentOnline: Boolean = false,
     val connectionState: ConnectionState = ConnectionState.DISCONNECTED,
+    /** False until the first message creates a conversation; there's no live connection before that. */
+    val hasConversation: Boolean = false,
     val errorMessage: String? = null,
     val pendingAttachmentUri: Uri? = null
 )

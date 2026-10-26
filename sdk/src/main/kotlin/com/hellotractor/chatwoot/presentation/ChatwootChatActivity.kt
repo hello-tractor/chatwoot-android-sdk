@@ -242,7 +242,9 @@ class ChatwootChatActivity : AppCompatActivity() {
                         binding.btnSend.isEnabled = true
                     }
 
-                    when (state.connectionState) {
+                    // A new chat has no conversation, so no socket yet: "Disconnected" would be misleading
+                    val connectionState = if (state.hasConversation) state.connectionState else ConnectionState.CONNECTED
+                    when (connectionState) {
                         ConnectionState.DISCONNECTED -> {
                             binding.connectionBanner.visibility = View.VISIBLE
                             binding.connectionBanner.text = getString(R.string.chatwoot_disconnected)

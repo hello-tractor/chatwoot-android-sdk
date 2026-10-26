@@ -59,7 +59,7 @@ class ChatwootViewModel(
                     val conversation = initResult.conversation
                     if (conversation != null) {
                         conversationId = conversation.id
-                        _state.update { it.copy(isInitialized = true, isLoading = false) }
+                        _state.update { it.copy(isInitialized = true, isLoading = false, hasConversation = true) }
 
                         observeSocket(conversation.id)
                         loadMessages()
@@ -111,6 +111,7 @@ class ChatwootViewModel(
                 convResult.fold(
                     onSuccess = { conversation ->
                         conversationId = conversation.id
+                        _state.update { it.copy(hasConversation = true) }
                         repository.saveConversationId(conversation.id)
                         repository.persistConversation(conversation)
 
