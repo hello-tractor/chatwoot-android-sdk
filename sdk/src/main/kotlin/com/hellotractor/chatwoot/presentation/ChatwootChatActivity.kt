@@ -3,6 +3,7 @@ package com.hellotractor.chatwoot.presentation
 import android.app.Dialog
 import android.content.Context
 import android.content.Intent
+import android.graphics.Color
 import android.net.Uri
 import android.os.Bundle
 import android.provider.OpenableColumns
@@ -15,6 +16,9 @@ import android.widget.ImageView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
@@ -89,6 +93,7 @@ class ChatwootChatActivity : AppCompatActivity() {
         binding = ActivityChatwootChatBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
+        applyWindowInsets()
         setupToolbar()
         setupRecyclerView()
         setupInput()
@@ -106,6 +111,31 @@ class ChatwootChatActivity : AppCompatActivity() {
     override fun onPause() {
         super.onPause()
         ChatwootSDK.onChatClosed()
+    }
+
+    // Draws behind the system bars (enforced from Android 15 anyway) and insets the toolbar and input
+    // itself, so host apps don't need their own workarounds to keep this screen clear of the bars
+    private fun applyWindowInsets() {
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+        @Suppress("DEPRECATION")
+        window.statusBarColor = Color.TRANSPARENT
+        @Suppress("DEPRECATION")
+        window.navigationBarColor = Color.TRANSPARENT
+        WindowCompat.getInsetsController(window, window.decorView).apply {
+            // Light icons over the coloured toolbar, dark ones over the white input area
+            isAppearanceLightStatusBars = false
+            isAppearanceLightNavigationBars = true
+        }
+
+        val toolbarHeight = binding.toolbar.layoutParams.height
+        ViewCompat.setOnApplyWindowInsetsListener(binding.root) { root, insets ->
+            val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
+            val ime = insets.getInsets(WindowInsetsCompat.Type.ime())
+            binding.toolbar.layoutParams = binding.toolbar.layoutParams.apply { height = toolbarHeight + bars.top }
+            binding.toolbar.setPadding(binding.toolbar.paddingLeft, bars.top, binding.toolbar.paddingRight, binding.toolbar.paddingBottom)
+            root.setPadding(bars.left, 0, bars.right, maxOf(bars.bottom, ime.bottom))
+            WindowInsetsCompat.CONSUMED
+        }
     }
 
     private fun setupToolbar() {
@@ -186,8 +216,6 @@ class ChatwootChatActivity : AppCompatActivity() {
         binding.toolbar.setTitleTextColor(theme.toolbarTextColor)
         binding.toolbar.setSubtitleTextColor(theme.toolbarTextColor)
         binding.toolbar.navigationIcon?.setTint(theme.toolbarTextColor)
-        @Suppress("DEPRECATION")
-        window.statusBarColor = theme.primaryDarkColor
 
         binding.root.setBackgroundColor(theme.backgroundColor)
         binding.inputContainer.setBackgroundColor(theme.backgroundColor)

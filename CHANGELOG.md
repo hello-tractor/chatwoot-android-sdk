@@ -28,5 +28,9 @@ Fixes for chat history going missing and chat failing to load.
 - **Readable errors.** Network failures show "No internet connection…" instead of the raw exception
   text, and a new chat no longer shows "Disconnected" before its first message (there's no live
   connection to have until a conversation exists).
+- **Edge-to-edge chat screen.** The chat screen now handles the system bars itself: the toolbar
+  extends under the status bar (light icons) and the input stays above the gesture bar and the
+  keyboard. Host apps should drop their own inset workarounds for `ChatwootChatActivity` (and not
+  pad it from a global activity callback). `ChatwootTheme.primaryDarkColor` is no longer used.
 - **Theme survives recreation.** The theme is passed in the launch Intent instead of a static field,
   so it's kept when Android recreates the chat screen. `ChatwootTheme` is now `Parcelable`.
