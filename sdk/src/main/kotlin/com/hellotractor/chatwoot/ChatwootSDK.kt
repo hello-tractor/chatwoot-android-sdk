@@ -26,10 +26,13 @@ import com.hellotractor.chatwoot.domain.usecase.LoadMessagesUseCase
 import com.hellotractor.chatwoot.domain.usecase.SendActionUseCase
 import com.hellotractor.chatwoot.domain.usecase.SendMessageUseCase
 import com.hellotractor.chatwoot.util.ChatwootConstants
+import com.hellotractor.chatwoot.util.ChatwootWebSocketEvent
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.StateFlow
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
@@ -77,12 +80,15 @@ object ChatwootSDK {
                 "ChatwootSDK is not initialized. Call ChatwootSDK.init(context, config) first."
             )
 
+    /**
+     * Cheap and safe to call from any thread: the slow parts (encrypted prefs, database) are opened
+     * on a background thread before the WebSocket connects.
+     */
     fun init(context: Context, config: ChatwootConfig) {
         if (_instance != null) return
         synchronized(this) {
             if (_instance != null) return
             val deps = ChatwootDependencies(context.applicationContext, config)
-            _instance = deps
 
             val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
             sdkScope = scope
@@ -93,10 +99,50 @@ object ChatwootSDK {
                 scope = scope
             )
             unreadManager = manager
+            _instance = deps
             manager.startListening()
+            persistIncomingMessages(deps, scope)
 
-            connectIfSessionExists(deps)
-            observeAppLifecycle(deps)
+            scope.launch {
+                withContext(Dispatchers.IO) { deps.warmUp() }
+                connectIfSessionExists(deps)
+                observeAppLifecycle(deps)
+            }
+        }
+    }
+
+    /**
+     * Forgets the signed-in user's chat: session ids, cached messages and unread count. Call it on
+     * logout so the next person to sign in on the device doesn't land in this user's conversation.
+     * Works whether or not [init] has run.
+     */
+    fun clearSession(context: Context) {
+        val deps = _instance
+        if (deps == null) {
+            context.applicationContext.deleteSharedPreferences(ChatwootConstants.PREFS_NAME)
+            context.applicationContext.deleteDatabase(ChatwootConstants.DATABASE_NAME)
+            return
+        }
+        deps.webSocketManager.disconnect()
+        unreadManager?.reset()
+        sdkScope?.launch {
+            withContext(Dispatchers.IO) { deps.repository.clearAll() }
+            // A foreground reconnect may have read the old token before it was cleared
+            deps.webSocketManager.disconnect()
+        }
+    }
+
+    // Keeps the cache complete, so messages that arrive while the chat screen is closed are there
+    // when it opens offline, instead of only living in that screen's memory.
+    private fun persistIncomingMessages(deps: ChatwootDependencies, scope: CoroutineScope) {
+        scope.launch(Dispatchers.IO) {
+            deps.webSocketManager.events.collect { event ->
+                when (event) {
+                    is ChatwootWebSocketEvent.MessageCreated -> deps.repository.persistMessage(event.message)
+                    is ChatwootWebSocketEvent.MessageUpdated -> deps.repository.persistMessage(event.message)
+                    else -> Unit
+                }
+            }
         }
     }
 
@@ -134,10 +180,8 @@ object ChatwootSDK {
     }
 
     internal fun onSessionEstablished(pubsubToken: String, conversationId: Int) {
-        val deps = _instance ?: return
-        if (deps.webSocketManager.connectionState.value == com.hellotractor.chatwoot.util.ConnectionState.DISCONNECTED) {
-            deps.webSocketManager.connect(pubsubToken, conversationId)
-        }
+        // No-op when this session's socket is already up or connecting
+        _instance?.webSocketManager?.connect(pubsubToken, conversationId)
     }
 
     fun destroy() {
@@ -183,6 +227,7 @@ internal class ChatwootDependencies(context: Context, val config: ChatwootConfig
 
     val apiService: ChatwootApiService = retrofit.create(ChatwootApiService::class.java)
 
+    // Room only opens the file on the first query, so building it here is cheap
     val database: ChatwootDatabase = Room.databaseBuilder(
         context,
         ChatwootDatabase::class.java,
@@ -193,8 +238,9 @@ internal class ChatwootDependencies(context: Context, val config: ChatwootConfig
     val contactDao: ChatwootContactDao = database.contactDao()
     val conversationDao: ChatwootConversationDao = database.conversationDao()
 
-    // Use EncryptedSharedPreferences for secure token storage (API 23+)
-    val prefs: SharedPreferences = createSecurePrefs(context)
+    // Use EncryptedSharedPreferences for secure token storage (API 23+). Lazy: opening it is a slow
+    // Keystore call, so it's done by warmUp() on a background thread rather than on init's thread.
+    val prefs: Lazy<SharedPreferences> = lazy { createSecurePrefs(context) }
 
     val webSocketManager: ChatwootWebSocketManager = ChatwootWebSocketManager(
         config = config,
@@ -207,7 +253,7 @@ internal class ChatwootDependencies(context: Context, val config: ChatwootConfig
         messageDao = messageDao,
         contactDao = contactDao,
         conversationDao = conversationDao,
-        prefs = prefs,
+        prefsProvider = prefs,
         contentResolver = context.contentResolver
     )
 
@@ -215,6 +261,12 @@ internal class ChatwootDependencies(context: Context, val config: ChatwootConfig
     val loadMessagesUseCase: LoadMessagesUseCase = LoadMessagesUseCase(repository)
     val sendMessageUseCase: SendMessageUseCase = SendMessageUseCase(repository)
     val sendActionUseCase: SendActionUseCase = SendActionUseCase(webSocketManager)
+
+    /** Opens the encrypted prefs and the database. Call off the main thread. */
+    fun warmUp() {
+        prefs.value
+        database.openHelper.writableDatabase
+    }
 
     private fun createSecurePrefs(context: Context): SharedPreferences {
         return try {

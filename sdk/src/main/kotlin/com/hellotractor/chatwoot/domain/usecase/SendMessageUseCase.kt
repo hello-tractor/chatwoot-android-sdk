@@ -33,6 +33,9 @@ class SendMessageUseCase(
             repository.sendMessage(contactId, conversationId, content, echoId)
         }
 
+        // The server copy (on success) or the restored draft (on failure) replaces the placeholder,
+        // so don't leave it behind in the cache as a phantom message
+        repository.deleteMessage(optimistic.id)
         if (result.isSuccess) {
             repository.persistMessage(result.getOrThrow())
         }

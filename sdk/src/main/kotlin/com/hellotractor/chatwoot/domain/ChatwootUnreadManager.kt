@@ -71,6 +71,12 @@ internal class ChatwootUnreadManager(
         )
     }
 
+    /** Forgets every unread message without touching storage, e.g. when the user logs out. */
+    fun reset() {
+        unreadMessages.clear()
+        _unreadState.value = ChatwootUnreadState()
+    }
+
     fun markSeen() {
         val now = System.currentTimeMillis() / 1000
         repository.saveLastSeenAt(now)

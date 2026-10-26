@@ -2,6 +2,7 @@
 <resources>
     <string name="chatwoot_send">Send</string>
     <string name="chatwoot_retry">Retry</string>
+    <string name="chatwoot_unavailable">Chat is unavailable right now. Please try again later.</string>
     <string name="chatwoot_typing">typing\u2026</string>
     <string name="chatwoot_connecting">Connecting\u2026</string>
     <string name="chatwoot_disconnected">Disconnected. Tap to retry.</string>

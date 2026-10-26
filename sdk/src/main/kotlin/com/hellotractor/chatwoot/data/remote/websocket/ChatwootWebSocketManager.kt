@@ -55,6 +55,7 @@ class ChatwootWebSocketManager(
     private val _connectionState = MutableStateFlow(ConnectionState.DISCONNECTED)
     val connectionState: StateFlow<ConnectionState> = _connectionState
 
+    @Volatile
     private var webSocket: WebSocket? = null
     private var pubsubToken: String? = null
     private var conversationId: Int? = null
@@ -64,11 +65,21 @@ class ChatwootWebSocketManager(
     private var isManuallyDisconnected = false
 
     fun connect(pubsubToken: String, conversationId: Int) {
+        val isSameSession = pubsubToken == this.pubsubToken && conversationId == this.conversationId
+        if (isSameSession && _connectionState.value != ConnectionState.DISCONNECTED) return
         this.pubsubToken = pubsubToken
         this.conversationId = conversationId
         this.isManuallyDisconnected = false
         this.reconnectAttempts = 0
         doConnect()
+    }
+
+    /** Drops the current socket (if any) and connects again now, e.g. when the user taps Retry. */
+    fun reconnect() {
+        val token = pubsubToken ?: return
+        val convId = conversationId ?: return
+        disconnect()
+        connect(token, convId)
     }
 
     fun disconnect() {
@@ -102,6 +113,8 @@ class ChatwootWebSocketManager(
 
     private fun doConnect() {
         pubsubToken ?: return
+        // Never keep two sockets open: the old one would deliver every event twice
+        webSocket?.cancel()
         _connectionState.value = ConnectionState.CONNECTING
 
         val request = Request.Builder()
@@ -109,12 +122,17 @@ class ChatwootWebSocketManager(
             .build()
 
         webSocket = okHttpClient.newWebSocket(request, object : WebSocketListener() {
+            // Callbacks from a socket that has since been replaced must not touch state or reconnect
+            private fun WebSocket.isStale() = this !== this@ChatwootWebSocketManager.webSocket
+
             override fun onOpen(webSocket: WebSocket, response: Response) {
+                if (webSocket.isStale()) return
                 logDebug("WebSocket opened")
                 reconnectAttempts = 0
             }
 
             override fun onMessage(webSocket: WebSocket, text: String) {
+                if (webSocket.isStale()) return
                 handleMessage(text)
             }
 
@@ -125,6 +143,7 @@ class ChatwootWebSocketManager(
 
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
                 logDebug("WebSocket closed: $code $reason")
+                if (webSocket.isStale()) return
                 _connectionState.value = ConnectionState.DISCONNECTED
                 presenceJob?.cancel()
                 if (!isManuallyDisconnected) {
@@ -134,6 +153,7 @@ class ChatwootWebSocketManager(
 
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
                 logError("WebSocket failure: ${t.message}", t)
+                if (webSocket.isStale()) return
                 _connectionState.value = ConnectionState.DISCONNECTED
                 _events.tryEmit(ChatwootWebSocketEvent.Error(
                     ChatwootError.WebSocketError(t.message ?: "Connection failed")

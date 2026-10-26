@@ -93,6 +93,7 @@ ChatwootLauncher.launch(
         identifier = "user-123",           // Unique user ID (required)
         name = "John Doe",                 // Display name (optional)
         email = "john@example.com",        // Email (optional)
+        phone = "+254712345678",           // Phone in E.164 format (optional)
         avatarUrl = "https://...",         // Avatar URL (optional)
         identifierHash = "hmac-hash",      // HMAC hash for identity validation (optional)
         customAttributes = mapOf(          // Custom data (optional)
@@ -102,6 +103,18 @@ ChatwootLauncher.launch(
     )
 )
 ```
+
+### 4. Clear the Session on Logout
+
+The chat session is stored per device. Clear it when the user logs out so the next person who
+signs in on the same device doesn't see the previous user's conversation:
+
+```kotlin
+ChatwootSDK.clearSession(context)
+```
+
+The SDK also clears the session itself if a different `identifier` is passed to `launch`, but
+calling `clearSession` on logout disconnects straight away and drops the cached messages.
 
 ## Theming
 
@@ -287,8 +300,10 @@ sdk/
 
 | Method | Description |
 |--------|-------------|
-| `init(context, config)` | Initialize the SDK (call once) |
+| `init(context, config)` | Initialize the SDK (call once, from any thread) |
 | `isInitialized` | Check if SDK is initialized |
+| `unreadState` | `StateFlow` of unread agent messages (requires `init`) |
+| `clearSession(context)` | Forget the current user's chat; call on logout (works before `init` too) |
 | `destroy()` | Clean up resources |
 
 ### ChatwootLauncher
