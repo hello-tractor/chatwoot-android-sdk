@@ -28,6 +28,9 @@ interface ChatwootMessageDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(message: ChatwootMessageEntity)
 
+    @Query("DELETE FROM chatwoot_messages WHERE id = :messageId")
+    suspend fun delete(messageId: Int)
+
     @Query("DELETE FROM chatwoot_messages WHERE conversation_id = :conversationId")
     suspend fun deleteAll(conversationId: Int)
 

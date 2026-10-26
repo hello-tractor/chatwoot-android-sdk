@@ -37,14 +37,20 @@ class ChatwootViewModel(
     private var contactId: String? = null
     private var conversationId: Int? = null
     private var pubsubToken: String? = null
+    private var user: ChatwootUser? = null
+    private var isInitializing = false
+    private var isObservingSocket = false
 
     fun initialize(user: ChatwootUser) {
-        if (_state.value.isInitialized) return
+        if (_state.value.isInitialized || isInitializing) return
+        this.user = user
+        isInitializing = true
 
         viewModelScope.launch {
-            _state.update { it.copy(isLoading = true) }
+            _state.update { it.copy(isLoading = true, errorMessage = null) }
 
             val result = initializeUseCase(user)
+            isInitializing = false
             result.fold(
                 onSuccess = { initResult ->
                     contactId = initResult.contact.contactIdentifier ?: initResult.contact.id.toString()
@@ -55,12 +61,7 @@ class ChatwootViewModel(
                         conversationId = conversation.id
                         _state.update { it.copy(isInitialized = true, isLoading = false) }
 
-                        if (pubsubToken != null) {
-                            ChatwootSDK.onSessionEstablished(pubsubToken!!, conversation.id)
-                            collectWebSocketEvents()
-                            collectConnectionState()
-                        }
-
+                        observeSocket(conversation.id)
                         loadMessages()
                         observeMessages(conversation.id)
                     } else {
@@ -90,10 +91,16 @@ class ChatwootViewModel(
     }
 
     private fun sendMessage(content: String, attachmentUri: Uri? = null) {
-        val cId = contactId ?: return
         val uri = attachmentUri ?: _state.value.pendingAttachmentUri
 
         viewModelScope.launch {
+            val cId = contactId
+            if (cId == null) {
+                // Chat never finished setting up; hand the text back rather than dropping it
+                _effects.send(ChatwootUiEffect.RestoreDraft(content))
+                _effects.send(ChatwootUiEffect.ShowError("Chat isn't connected yet. Tap retry and send again."))
+                return@launch
+            }
             if (uri != null) {
                 _state.update { it.copy(isUploading = true) }
             }
@@ -108,14 +115,11 @@ class ChatwootViewModel(
                         repository.persistConversation(conversation)
 
                         // Now connect WebSocket for this conversation
-                        if (pubsubToken != null) {
-                            ChatwootSDK.onSessionEstablished(pubsubToken!!, conversation.id)
-                            collectWebSocketEvents()
-                            collectConnectionState()
-                        }
+                        observeSocket(conversation.id)
                     },
                     onFailure = { error ->
-                        _state.update { it.copy(isUploading = false, pendingAttachmentUri = null) }
+                        _state.update { it.copy(isUploading = false) }
+                        _effects.send(ChatwootUiEffect.RestoreDraft(content))
                         _effects.send(ChatwootUiEffect.ShowError(error.message ?: "Failed to start conversation"))
                         return@launch
                     }
@@ -124,7 +128,10 @@ class ChatwootViewModel(
 
             val convId = conversationId ?: return@launch
             val result = sendMessageUseCase(cId, convId, content, uri)
-            _state.update { it.copy(isUploading = false, pendingAttachmentUri = null) }
+            _state.update {
+                // Keep the attachment selected on failure so the user can resend it
+                it.copy(isUploading = false, pendingAttachmentUri = if (result.isSuccess) null else it.pendingAttachmentUri)
+            }
             result.fold(
                 onSuccess = { message ->
                     // Add the sent message to the UI immediately
@@ -142,18 +149,20 @@ class ChatwootViewModel(
                     _effects.send(ChatwootUiEffect.ScrollToBottom)
                 },
                 onFailure = { error ->
+                    _effects.send(ChatwootUiEffect.RestoreDraft(content))
                     _effects.send(ChatwootUiEffect.ShowError(error.message ?: "Failed to send"))
                 }
             )
         }
     }
 
-    private fun loadMessages() {
+    /** [silent] refreshes in the background, e.g. after a reconnect: no spinner and no error toast. */
+    private fun loadMessages(silent: Boolean = false) {
         val cId = contactId ?: return
         val convId = conversationId ?: return
 
         viewModelScope.launch {
-            _state.update { it.copy(isLoading = true) }
+            if (!silent) _state.update { it.copy(isLoading = true) }
             val result = loadMessagesUseCase(cId, convId)
             result.fold(
                 onSuccess = { loadResult ->
@@ -164,10 +173,12 @@ class ChatwootViewModel(
                             hasMoreMessages = loadResult.hasMore
                         )
                     }
-                    _effects.send(ChatwootUiEffect.ScrollToBottom)
+                    // A background catch-up mustn't yank the user away from older messages they're reading
+                    if (!silent) _effects.send(ChatwootUiEffect.ScrollToBottom)
                 },
                 onFailure = { error ->
                     _state.update { it.copy(isLoading = false) }
+                    if (silent) return@fold
                     _effects.send(ChatwootUiEffect.ShowError(error.message ?: "Failed to load messages"))
                 }
             )
@@ -194,6 +205,15 @@ class ChatwootViewModel(
 
     @Suppress("UNUSED_PARAMETER")
     private fun observeMessages(conversationId: Int) {
+    }
+
+    private fun observeSocket(conversationId: Int) {
+        val token = pubsubToken ?: return
+        ChatwootSDK.onSessionEstablished(token, conversationId)
+        if (isObservingSocket) return
+        isObservingSocket = true
+        collectWebSocketEvents()
+        collectConnectionState()
     }
 
     private fun collectWebSocketEvents() {
@@ -240,7 +260,11 @@ class ChatwootViewModel(
                     is ChatwootWebSocketEvent.Error -> {
                         _effects.send(ChatwootUiEffect.ShowError(event.error.message))
                     }
-                    else -> { /* Welcome, Ping, ConfirmedSubscription — no UI action */ }
+                    is ChatwootWebSocketEvent.ConfirmedSubscription -> {
+                        // (Re)subscribed: catch up on anything sent while the socket was down
+                        if (!_state.value.isLoading) loadMessages(silent = true)
+                    }
+                    else -> { /* Welcome, Ping — no UI action */ }
                 }
             }
         }
@@ -256,6 +280,11 @@ class ChatwootViewModel(
 
     private fun retryConnection() {
         _state.update { it.copy(errorMessage = null) }
+        if (!_state.value.isInitialized) {
+            user?.let { initialize(it) }
+            return
+        }
+        webSocketManager.reconnect()
         loadMessages()
     }
 

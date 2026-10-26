@@ -1,6 +1,7 @@
 package com.hellotractor.chatwoot.presentation
 
 import android.app.Dialog
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
@@ -21,6 +22,8 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.bumptech.glide.Glide
+import com.google.gson.Gson
+import com.google.gson.reflect.TypeToken
 import com.hellotractor.chatwoot.ChatwootSDK
 import com.hellotractor.chatwoot.ChatwootTheme
 import com.hellotractor.chatwoot.R
@@ -42,10 +45,24 @@ class ChatwootChatActivity : AppCompatActivity() {
         const val EXTRA_USER_IDENTIFIER = "chatwoot_user_identifier"
         const val EXTRA_USER_NAME = "chatwoot_user_name"
         const val EXTRA_USER_EMAIL = "chatwoot_user_email"
+        const val EXTRA_USER_PHONE = "chatwoot_user_phone"
         const val EXTRA_USER_AVATAR_URL = "chatwoot_user_avatar_url"
         const val EXTRA_USER_IDENTIFIER_HASH = "chatwoot_user_identifier_hash"
+        const val EXTRA_USER_CUSTOM_ATTRIBUTES = "chatwoot_user_custom_attributes"
+        const val EXTRA_THEME = "chatwoot_theme"
 
-        internal var themeOverride: ChatwootTheme? = null
+        internal fun createIntent(context: Context, user: ChatwootUser, theme: ChatwootTheme): Intent =
+            Intent(context, ChatwootChatActivity::class.java).apply {
+                putExtra(EXTRA_USER_IDENTIFIER, user.identifier)
+                putExtra(EXTRA_USER_NAME, user.name)
+                putExtra(EXTRA_USER_EMAIL, user.email)
+                putExtra(EXTRA_USER_PHONE, user.phone)
+                putExtra(EXTRA_USER_AVATAR_URL, user.avatarUrl)
+                putExtra(EXTRA_USER_IDENTIFIER_HASH, user.identifierHash)
+                // Values can be any JSON type, so they travel as JSON rather than a typed Bundle
+                user.customAttributes?.let { putExtra(EXTRA_USER_CUSTOM_ATTRIBUTES, Gson().toJson(it)) }
+                putExtra(EXTRA_THEME, theme)
+            }
     }
 
     private lateinit var binding: ActivityChatwootChatBinding
@@ -55,8 +72,11 @@ class ChatwootChatActivity : AppCompatActivity() {
     private lateinit var messageAdapter: ChatwootMessageAdapter
     private var typingJob: Job? = null
 
-    private val theme: ChatwootTheme
-        get() = themeOverride ?: ChatwootTheme.default()
+    // The typed overload is API 33+ and this SDK's androidx-core predates IntentCompat's backport
+    @Suppress("DEPRECATION")
+    private val theme: ChatwootTheme by lazy {
+        intent.getParcelableExtra<ChatwootTheme>(EXTRA_THEME) ?: ChatwootTheme.default()
+    }
 
     private val filePickerLauncher = registerForActivityResult(
         ActivityResultContracts.GetContent()
@@ -129,6 +149,14 @@ class ChatwootChatActivity : AppCompatActivity() {
 
         binding.btnAttach.setOnClickListener {
             filePickerLauncher.launch("*/*")
+        }
+
+        binding.btnRetry.setOnClickListener {
+            viewModel.onEvent(ChatwootUiEvent.RetryConnection)
+        }
+
+        binding.connectionBanner.setOnClickListener {
+            viewModel.onEvent(ChatwootUiEvent.RetryConnection)
         }
 
         binding.btnRemoveAttachment.setOnClickListener {
@@ -256,6 +284,7 @@ class ChatwootChatActivity : AppCompatActivity() {
                             Toast.makeText(this@ChatwootChatActivity, effect.message, Toast.LENGTH_SHORT).show()
                         }
                         is ChatwootUiEffect.MessageSent -> {}
+                        is ChatwootUiEffect.RestoreDraft -> restoreDraft(effect.content)
                         is ChatwootUiEffect.ConversationResolved -> {}
                         is ChatwootUiEffect.OpenImageViewer -> showImageViewer(effect.imageUrl)
                         is ChatwootUiEffect.OpenFileExternal -> openFileExternal(effect.fileUrl, effect.mimeType)
@@ -318,16 +347,38 @@ class ChatwootChatActivity : AppCompatActivity() {
         return name ?: uri.lastPathSegment
     }
 
+    // Only fills an empty input, so it never overwrites something the user typed since sending
+    private fun restoreDraft(content: String) {
+        if (content.isNotEmpty() && binding.etMessage.text.isNullOrEmpty()) {
+            binding.etMessage.setText(content)
+            binding.etMessage.setSelection(content.length)
+        }
+    }
+
     private fun initializeChat() {
-        val identifier = intent.getStringExtra(EXTRA_USER_IDENTIFIER) ?: return
+        val identifier = intent.getStringExtra(EXTRA_USER_IDENTIFIER)
+        if (identifier.isNullOrBlank()) {
+            // Nothing to identify the contact with; close instead of leaving a blank screen
+            Toast.makeText(this, R.string.chatwoot_unavailable, Toast.LENGTH_LONG).show()
+            finish()
+            return
+        }
         val user = ChatwootUser(
             identifier = identifier,
             identifierHash = intent.getStringExtra(EXTRA_USER_IDENTIFIER_HASH),
             name = intent.getStringExtra(EXTRA_USER_NAME),
             email = intent.getStringExtra(EXTRA_USER_EMAIL),
-            avatarUrl = intent.getStringExtra(EXTRA_USER_AVATAR_URL)
+            phone = intent.getStringExtra(EXTRA_USER_PHONE),
+            avatarUrl = intent.getStringExtra(EXTRA_USER_AVATAR_URL),
+            customAttributes = readCustomAttributes()
         )
         viewModel.initialize(user)
+    }
+
+    private fun readCustomAttributes(): Map<String, Any>? {
+        val json = intent.getStringExtra(EXTRA_USER_CUSTOM_ATTRIBUTES) ?: return null
+        val type = object : TypeToken<Map<String, Any>>() {}.type
+        return runCatching { Gson().fromJson<Map<String, Any>>(json, type) }.getOrNull()
     }
 
     override fun onOptionsItemSelected(item: MenuItem): Boolean {

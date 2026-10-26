@@ -20,6 +20,7 @@ interface ChatwootRepository {
     suspend fun getMessageCount(conversationId: Int): Int
     suspend fun persistMessages(messages: List<ChatwootMessage>)
     suspend fun persistMessage(message: ChatwootMessage)
+    suspend fun deleteMessage(messageId: Int)
     suspend fun persistContact(contact: ChatwootContact)
     suspend fun persistConversation(conversation: ChatwootConversation)
     suspend fun getPersistedContact(): ChatwootContact?
@@ -38,5 +39,12 @@ interface ChatwootRepository {
     fun getConversationId(): Int?
     fun saveLastSeenAt(epochSeconds: Long)
     fun getLastSeenAt(): Long
+    fun saveUserIdentifier(identifier: String)
+    fun getUserIdentifier(): String?
+
+    /** Clears the stored session ids (contact, conversation, socket token, last seen). */
     fun clearSession()
+
+    /** Clears the session ids and every cached contact, conversation and message. */
+    suspend fun clearAll()
 }

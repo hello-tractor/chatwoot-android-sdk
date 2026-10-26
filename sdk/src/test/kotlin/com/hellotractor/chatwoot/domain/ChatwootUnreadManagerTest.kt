@@ -163,4 +163,15 @@ class ChatwootUnreadManagerTest {
         assertThat(manager.unreadState.value.count).isEqualTo(0)
         assertThat(manager.unreadState.value.hasUnread).isFalse()
     }
+
+    @Test
+    fun `reset clears unread state without saving last seen`() = runTest(testDispatcher) {
+        eventFlow.emit(ChatwootWebSocketEvent.MessageCreated(outgoingMessage(id = 1)))
+        assertThat(manager.unreadState.value.count).isEqualTo(1)
+
+        manager.reset()
+
+        assertThat(manager.unreadState.value.count).isEqualTo(0)
+        verify(exactly = 0) { repository.saveLastSeenAt(any()) }
+    }
 }

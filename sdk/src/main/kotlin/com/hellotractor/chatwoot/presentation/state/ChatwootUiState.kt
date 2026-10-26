@@ -32,6 +32,8 @@ sealed class ChatwootUiEvent {
 sealed class ChatwootUiEffect {
     data class ShowError(val message: String) : ChatwootUiEffect()
     data object MessageSent : ChatwootUiEffect()
+    /** A message couldn't be sent: put its text back in the input so it isn't lost. */
+    data class RestoreDraft(val content: String) : ChatwootUiEffect()
     data object ScrollToBottom : ChatwootUiEffect()
     data class ConversationResolved(val conversationId: Int) : ChatwootUiEffect()
     data class OpenImageViewer(val imageUrl: String) : ChatwootUiEffect()

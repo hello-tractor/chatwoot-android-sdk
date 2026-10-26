@@ -1,8 +1,12 @@
 package com.hellotractor.chatwoot
 
+import android.os.Parcelable
 import androidx.annotation.ColorInt
 import androidx.annotation.DrawableRes
+import kotlinx.parcelize.Parcelize
 
+// Parcelable so it travels in the launch Intent and survives the chat screen being recreated
+@Parcelize
 data class ChatwootTheme(
     @ColorInt val primaryColor: Int = 0xFF1B5E20.toInt(),
     @ColorInt val primaryDarkColor: Int = 0xFF003300.toInt(),
@@ -27,7 +31,7 @@ data class ChatwootTheme(
     val showAgentName: Boolean = true,
     val showTimestamps: Boolean = true,
     val dateFormat: String = "hh:mm a"
-) {
+) : Parcelable {
     companion object {
         fun helloTractor(): ChatwootTheme = ChatwootTheme(
             primaryColor = 0xFF1B5E20.toInt(),

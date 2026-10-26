@@ -26,9 +26,13 @@ class ChatwootRepositoryImpl(
     private val messageDao: ChatwootMessageDao,
     private val contactDao: ChatwootContactDao,
     private val conversationDao: ChatwootConversationDao,
-    private val prefs: SharedPreferences,
+    prefsProvider: Lazy<SharedPreferences>,
     private val contentResolver: ContentResolver
 ) : ChatwootRepository {
+
+    // Encrypted prefs cost a Keystore call to open, so they're only created on first use (off the
+    // main thread when ChatwootSDK warms them up) instead of whenever the repository is built.
+    private val prefs: SharedPreferences by prefsProvider
 
     companion object {
         private const val MAX_ATTACHMENT_SIZE_BYTES = 15L * 1024 * 1024 // 15MB
@@ -54,6 +58,8 @@ class ChatwootRepositoryImpl(
         if (response.isSuccessful) {
             val dto = response.body() ?: return@apiCall Result.failure(ChatwootError.ContactNotFound())
             Result.success(dto.toDomain())
+        } else if (response.code() == 404) {
+            Result.failure(ChatwootError.ContactNotFound())
         } else {
             Result.failure(ChatwootError.ApiError(response.code(), response.message()))
         }
@@ -211,6 +217,10 @@ class ChatwootRepositoryImpl(
         messageDao.upsert(message.toEntity())
     }
 
+    override suspend fun deleteMessage(messageId: Int) {
+        messageDao.delete(messageId)
+    }
+
     override suspend fun persistContact(contact: ChatwootContact) {
         contactDao.upsert(contact.toEntity())
     }
@@ -272,8 +282,22 @@ class ChatwootRepositoryImpl(
         messageDao.trimToCount(conversationId, keepCount)
     }
 
+    override fun saveUserIdentifier(identifier: String) {
+        prefs.edit().putString(ChatwootConstants.KEY_USER_IDENTIFIER, identifier).apply()
+    }
+
+    override fun getUserIdentifier(): String? =
+        prefs.getString(ChatwootConstants.KEY_USER_IDENTIFIER, null)
+
     override fun clearSession() {
-        prefs.edit().clear().apply()
+        prefs.edit().clear().commit()
+    }
+
+    override suspend fun clearAll() {
+        clearSession()
+        messageDao.deleteAllMessages()
+        conversationDao.deleteAll()
+        contactDao.deleteAll()
     }
 
     private inline fun <T> apiCall(block: () -> Result<T>): Result<T> {

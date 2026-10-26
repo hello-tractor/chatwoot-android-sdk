@@ -194,4 +194,29 @@ class SendMessageUseCaseTest {
         assertThat(result.isFailure).isTrue()
         assertThat(result.exceptionOrNull()?.message).isEqualTo("Upload failed")
     }
+
+    @Test
+    fun `invoke removes the optimistic placeholder after a successful send`() = runTest {
+        val captured = mutableListOf<ChatwootMessage>()
+        coEvery { repository.persistMessage(capture(captured)) } returns Unit
+        coEvery { repository.sendMessage(any(), any(), any(), any()) } returns Result.success(
+            ChatwootMessage(id = 900, content = "Hi", messageType = ChatwootMessageType.INCOMING, createdAt = 1L, conversationId = 1)
+        )
+
+        useCase("c1", 1, "Hi")
+
+        coVerify { repository.deleteMessage(captured.first().id) }
+    }
+
+    @Test
+    fun `invoke removes the optimistic placeholder after a failed send`() = runTest {
+        val captured = mutableListOf<ChatwootMessage>()
+        coEvery { repository.persistMessage(capture(captured)) } returns Unit
+        coEvery { repository.sendMessage(any(), any(), any(), any()) } returns Result.failure(Exception("offline"))
+
+        useCase("c1", 1, "Hi")
+
+        assertThat(captured).hasSize(1)
+        coVerify { repository.deleteMessage(captured.first().id) }
+    }
 }
